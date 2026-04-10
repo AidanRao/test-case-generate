@@ -1,0 +1,7 @@
+.DS_Store
+.idea/
+.venv/
+.trae/
+__pycache__/
+data/
+config.json
