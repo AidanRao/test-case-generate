@@ -77,25 +77,24 @@ const getNodeAttrs = (type: BoardNode['type'], label: string) => {
   if (type === 'root') {
     return {
       body: { fill: '#0ea5e9', stroke: '#0284c7', rx: 6, ry: 6 },
-      label: { text: displayLabel, fill: '#fff', fontSize: 14, fontWeight: 'bold' }
+      label: { text: displayLabel, fill: '#fff', fontSize: 24, fontWeight: 'bold' }
     }
   }
   if (type === 'feature') {
     return {
       body: { fill: '#10b981', stroke: '#059669', rx: 6, ry: 6 },
-      label: { text: displayLabel, fill: '#fff', fontSize: 13, fontWeight: 'bold' }
+      label: { text: displayLabel, fill: '#fff', fontSize: 22, fontWeight: 'bold' }
     }
   }
   if (type === 'subfeature') {
     return {
       body: { fill: '#f59e0b', stroke: '#d97706', rx: 6, ry: 6 },
-      label: { text: displayLabel, fill: '#fff', fontSize: 12, fontWeight: 'bold' }
+      label: { text: displayLabel, fill: '#fff', fontSize: 20, fontWeight: 'bold' }
     }
   }
-  // 默认/testcase 类型
   return {
     body: { fill: '#f8fafc', stroke: '#e2e8f0', rx: 6, ry: 6 },
-    label: { text: displayLabel, fill: '#475569', fontSize: 12, fontWeight: 500 }
+    label: { text: displayLabel, fill: '#475569', fontSize: 18, fontWeight: 500 }
   }
 }
 
