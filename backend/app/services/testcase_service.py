@@ -62,7 +62,7 @@ class TestCaseService:
                 "base_url": ai_config.get("base_url", ""),
                 "model": ai_config.get("model", "") or self.config.ai_model,
             }
-        user_config = self.storage.get_default_ai_config()
+        user_config = self.storage.get_ai_config()
         if user_config and user_config.get("api_key"):
             return {
                 "api_key": user_config["api_key"],

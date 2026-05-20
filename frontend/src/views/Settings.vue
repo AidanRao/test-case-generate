@@ -98,7 +98,7 @@
               <button
                 class="rounded-xl bg-indigo-600 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700"
                 :disabled="!form.baseUrl || saving"
-                @click="saveConfig"
+                @click="saveConfigHandler"
               >
                 <span v-if="saving" class="flex items-center gap-2">
                   <el-spinner class="h-4 w-4" />
@@ -119,13 +119,12 @@ import { reactive, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ArrowLeft, Setting, CircleCheck, CircleClose } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { createConfig, updateConfig, getDefaultConfig } from '../api/aiConfig'
+import { getConfig, saveConfig } from '../api/aiConfig'
 
 const router = useRouter()
 
 const loading = ref(true)
 const saving = ref(false)
-const existingConfigId = ref<string | null>(null)
 
 const form = reactive({
   baseUrl: '',
@@ -139,12 +138,11 @@ const testResult = ref<'success' | 'error' | null>(null)
 const loadConfig = async () => {
   loading.value = true
   try {
-    const config = await getDefaultConfig()
-    if (config && typeof config === 'object' && 'id' in config) {
-      existingConfigId.value = (config as any).id
-      form.apiKey = (config as any).api_key || ''
-      form.baseUrl = (config as any).base_url || ''
-      form.model = (config as any).model || ''
+    const config = await getConfig()
+    if (config && typeof config === 'object') {
+      form.apiKey = config.api_key || ''
+      form.baseUrl = config.base_url || ''
+      form.model = config.model || ''
     }
   } catch {
     form.apiKey = ''
@@ -155,7 +153,7 @@ const loadConfig = async () => {
   }
 }
 
-const saveConfig = async () => {
+const saveConfigHandler = async () => {
   if (!form.baseUrl.trim()) {
     ElMessage.warning('请输入 Base URL')
     return
@@ -169,12 +167,7 @@ const saveConfig = async () => {
       model: form.model.trim()
     }
 
-    if (existingConfigId.value) {
-      await updateConfig(existingConfigId.value, payload)
-    } else {
-      await createConfig(payload)
-    }
-
+    await saveConfig(payload)
     ElMessage.success('保存成功')
     await loadConfig()
   } catch {
