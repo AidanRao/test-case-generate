@@ -7,6 +7,7 @@ from app.routes.projects import projects_bp
 from app.routes.quality import quality_bp
 from app.routes.requirements import requirements_bp
 from app.routes.testcases import testcases_bp
+from app.routes.ai_config import ai_config_bp
 from app.storage.json_storage import JsonStorage
 
 
@@ -27,5 +28,6 @@ def create_app():
     app.register_blueprint(requirements_bp, url_prefix="/v1")
     app.register_blueprint(testcases_bp, url_prefix="/v1")
     app.register_blueprint(quality_bp, url_prefix="/v1")
+    app.register_blueprint(ai_config_bp, url_prefix="/v1")
 
     return app

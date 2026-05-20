@@ -46,3 +46,21 @@ class StorageBackend:
 
     def delete_testcases_by_requirement(self, project_id, requirement_id):
         raise NotImplementedError()
+
+    def get_ai_config(self, config_id):
+        raise NotImplementedError()
+
+    def list_ai_configs(self):
+        raise NotImplementedError()
+
+    def create_ai_config(self, payload):
+        raise NotImplementedError()
+
+    def update_ai_config(self, config_id, payload):
+        raise NotImplementedError()
+
+    def delete_ai_config(self, config_id):
+        raise NotImplementedError()
+
+    def get_default_ai_config(self):
+        raise NotImplementedError()

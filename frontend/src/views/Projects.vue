@@ -79,22 +79,32 @@
           </div>
         </aside>
         <div class="flex-1">
-          <div class="mb-4 inline-flex rounded-full border border-slate-200 bg-white p-1 shadow-sm">
+          <div class="mb-4 flex items-center justify-between">
+            <div class="inline-flex rounded-full border border-slate-200 bg-white p-1 shadow-sm">
+              <button
+                class="rounded-full px-4 py-2 text-sm font-semibold transition"
+                :class="activeSection === 'projects' ? 'bg-sky-600 text-white' : 'text-slate-600 hover:bg-slate-50'"
+                type="button"
+                @click="activeSection = 'projects'"
+              >
+                项目管理
+              </button>
+              <button
+                class="rounded-full px-4 py-2 text-sm font-semibold transition"
+                :class="activeSection === 'knowledge' ? 'bg-sky-600 text-white' : 'text-slate-600 hover:bg-slate-50'"
+                type="button"
+                @click="activeSection = 'knowledge'"
+              >
+                知识库管理
+              </button>
+            </div>
             <button
-              class="rounded-full px-4 py-2 text-sm font-semibold transition"
-              :class="activeSection === 'projects' ? 'bg-sky-600 text-white' : 'text-slate-600 hover:bg-slate-50'"
+              class="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
               type="button"
-              @click="activeSection = 'projects'"
+              @click="goToSettings"
             >
-              项目管理
-            </button>
-            <button
-              class="rounded-full px-4 py-2 text-sm font-semibold transition"
-              :class="activeSection === 'knowledge' ? 'bg-sky-600 text-white' : 'text-slate-600 hover:bg-slate-50'"
-              type="button"
-              @click="activeSection = 'knowledge'"
-            >
-              知识库管理
+              <el-icon class="text-base"><Setting /></el-icon>
+              系统设置
             </button>
           </div>
 
@@ -215,7 +225,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Collection, FolderOpened } from '@element-plus/icons-vue'
+import { Collection, FolderOpened, Setting } from '@element-plus/icons-vue'
 import KnowledgeBasePanel from '../components/KnowledgeBasePanel.vue'
 import PaginationBar from '../components/PaginationBar.vue'
 import ProjectDialog from '../components/ProjectDialog.vue'
@@ -466,6 +476,10 @@ const removeProject = async (projectId: string) => {
 const goToTestCases = (projectId: string) => {
   router.push({ name: 'test-cases', params: { projectId } })
   recentEntries.value = recordProjectVisit(projectId)
+}
+
+const goToSettings = () => {
+  router.push({ name: 'settings' })
 }
 
 const formatDate = (value: string) => {

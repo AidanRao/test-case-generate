@@ -5,6 +5,7 @@ from app.storage.json_io import JsonIO
 from app.storage.project_store import ProjectStore
 from app.storage.requirement_store import RequirementStore
 from app.storage.testcase_store import TestCaseStore
+from app.storage.ai_config_store import AIConfigStore
 
 
 class JsonStorage(StorageBackend):
@@ -17,6 +18,7 @@ class JsonStorage(StorageBackend):
         self.requirement_store = RequirementStore(
             io, os.path.join(self.data_dir, "requirements.json"), self.project_store
         )
+        self.ai_config_store = AIConfigStore(io, os.path.join(self.data_dir, "ai_configs.json"))
 
     def list_projects(self, keyword=None):
         return self.project_store.list_projects(keyword)
@@ -76,3 +78,26 @@ class JsonStorage(StorageBackend):
 
     def delete_testcases_by_requirement(self, project_id, requirement_id):
         return self.testcase_store.delete_testcases_by_requirement(project_id, requirement_id)
+
+    def get_ai_config(self, config_id):
+        config = self.ai_config_store.get_config(config_id)
+        return config.to_dict() if config else None
+
+    def list_ai_configs(self):
+        configs = self.ai_config_store.list_configs()
+        return [config.to_dict() for config in configs]
+
+    def create_ai_config(self, payload):
+        config = self.ai_config_store.create_config(payload)
+        return config.to_dict() if config else None
+
+    def update_ai_config(self, config_id, payload):
+        config = self.ai_config_store.update_config(config_id, payload)
+        return config.to_dict() if config else None
+
+    def delete_ai_config(self, config_id):
+        return self.ai_config_store.delete_config(config_id)
+
+    def get_default_ai_config(self):
+        config = self.ai_config_store.get_default_config()
+        return config.to_dict() if config else None

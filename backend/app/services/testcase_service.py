@@ -9,8 +9,8 @@ class TestCaseService:
         self.storage = storage
         self.config = config
 
-    def generate_testcases(self, project_id, requirement_ids, replace=False):
-        generator = self._build_generator()
+    def generate_testcases(self, project_id, requirement_ids, replace=False, ai_config=None):
+        generator = self._build_generator(ai_config)
         if generator is None:
             return None, "missing_api_key"
         results = []
@@ -45,11 +45,35 @@ class TestCaseService:
     def delete_testcase(self, project_id, testcase_id):
         return self.storage.delete_testcase(project_id, testcase_id)
 
-    def _build_generator(self):
-        if not self.config.ai_api_key:
+    def _build_generator(self, ai_config=None):
+        effective_config = self._get_effective_ai_config(ai_config)
+        if not effective_config.get("api_key"):
             return None
-        client = OpenAI(api_key=self.config.ai_api_key, base_url=self.config.ai_base_url or None)
-        return TestCaseGenerator(client, self.config.ai_model)
+        client = OpenAI(
+            api_key=effective_config["api_key"],
+            base_url=effective_config.get("base_url") or None
+        )
+        return TestCaseGenerator(client, effective_config.get("model"))
+
+    def _get_effective_ai_config(self, ai_config=None):
+        if ai_config and ai_config.get("api_key"):
+            return {
+                "api_key": ai_config["api_key"],
+                "base_url": ai_config.get("base_url", ""),
+                "model": ai_config.get("model", "") or self.config.ai_model,
+            }
+        user_config = self.storage.get_default_ai_config()
+        if user_config and user_config.get("api_key"):
+            return {
+                "api_key": user_config["api_key"],
+                "base_url": user_config.get("base_url", ""),
+                "model": user_config.get("model", "") or self.config.ai_model,
+            }
+        return {
+            "api_key": self.config.ai_api_key,
+            "base_url": self.config.ai_base_url,
+            "model": self.config.ai_model,
+        }
 
     def _map_req_type(self, requirement_type):
         return requirement_type.replace("需求", "测试")

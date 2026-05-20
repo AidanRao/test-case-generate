@@ -19,12 +19,13 @@ def generate_testcases(project_id):
     storage = current_app.config["STORAGE"]
     requirement_ids = payload.get("requirement_ids")
     replace = bool(payload.get("replace"))
+    ai_config = payload.get("ai_config")
     if not requirement_ids:
         requirements = storage.list_requirements(project_id) or []
         requirement_ids = [item.get("id") for item in requirements]
     config = current_app.config["APP_CONFIG"]
     service = TestCaseService(storage, config)
-    results, err = service.generate_testcases(project_id, requirement_ids, replace=replace)
+    results, err = service.generate_testcases(project_id, requirement_ids, replace=replace, ai_config=ai_config)
     if err == "missing_api_key":
         return error(50001, "未配置 OpenAI API Key", 500)
     if err == "requirement_not_found":
@@ -40,6 +41,7 @@ def generate_testcases_async(project_id):
     storage = current_app.config["STORAGE"]
     requirement_ids = payload.get("requirement_ids")
     replace = bool(payload.get("replace"))
+    ai_config = payload.get("ai_config")
     if not requirement_ids:
         requirements = storage.list_requirements(project_id) or []
         requirement_ids = [item.get("id") for item in requirements]
@@ -68,7 +70,7 @@ def generate_testcases_async(project_id):
         try:
             service = TestCaseService(storage, config)
             results, err = service.generate_testcases(
-                project_id, requirement_ids, replace=replace
+                project_id, requirement_ids, replace=replace, ai_config=ai_config
             )
         except Exception as exc:
             with jobs_state["lock"]:
