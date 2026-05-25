@@ -1,4 +1,5 @@
 import json
+import re
 from openai import OpenAI
 from openai.types.chat import ChatCompletionSystemMessageParam, ChatCompletionUserMessageParam
 
@@ -137,6 +138,9 @@ class TestCaseGenerator:
             )
             content = response.choices[0].message.content
             clean_content = content.strip()
+            
+            clean_content = re.sub(r'<thinking>.*?</thinking>', '', clean_content, flags=re.DOTALL)
+            
             if clean_content.startswith("```json"):
                 clean_content = clean_content[7:]
             elif clean_content.startswith("```"):

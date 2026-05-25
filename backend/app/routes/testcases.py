@@ -298,7 +298,8 @@ def _render_testcases_md(testcases, requirements_by_id):
 def integration_generate_testcases():
     payload = request.get_json(silent=True) or {}
     fmt = (payload.get("format") or "md").lower()
-    is_save = bool(payload.get("is_save"))
+    # 默认为保存
+    is_save = bool(payload.get("is_save", True))
     if fmt == "excel":
         return error(40001, "暂不支持 excel", 400)
     if fmt not in ("json", "md"):
