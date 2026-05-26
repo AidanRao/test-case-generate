@@ -83,4 +83,7 @@ class TestCaseStore:
     def delete_by_project(self, project_id):
         testcases = self._load_testcases()
         filtered = [item for item in testcases if str(item.project_id) != str(project_id)]
+        if len(filtered) == len(testcases):
+            return False
         self._save_testcases(filtered)
+        return True

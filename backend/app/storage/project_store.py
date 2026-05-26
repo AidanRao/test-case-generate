@@ -63,6 +63,8 @@ class ProjectStore:
                     code=payload.get("code", project.code),
                     title=payload.get("title", project.title),
                 )
+                if new_project == project:
+                    return True
                 projects[idx] = new_project
                 updated = True
                 break

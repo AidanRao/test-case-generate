@@ -26,4 +26,11 @@ const updateSystemTask = async (
   return response.data
 }
 
-export { getSystemTasks, updateSystemTask }
+const runSystemTask = async (taskId: string) => {
+  const response = await requestJson<SystemTask>(`/system/tasks/${taskId}/run`, {
+    method: 'POST'
+  })
+  return response.data
+}
+
+export { getSystemTasks, updateSystemTask, runSystemTask }

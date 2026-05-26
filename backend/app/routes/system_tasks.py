@@ -22,3 +22,14 @@ def update_system_task(task_id):
     if err:
         return error(40001, "启用状态或执行间隔不合法", 400)
     return ok(task)
+
+
+@system_tasks_bp.post("/system/tasks/<task_id>/run")
+def run_system_task(task_id):
+    service = SystemTaskService(current_app.config["STORAGE"])
+    task, err = service.run_task(task_id)
+    if err == "not_found":
+        return error(40401, "定时任务不存在", 404)
+    if err == "unavailable":
+        return error(40901, "任务当前不可执行，请检查数据源是否可用", 409)
+    return ok(task)

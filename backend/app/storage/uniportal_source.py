@@ -15,12 +15,10 @@ class UniPortalRequirementSource:
     def enabled(self):
         return bool(self.storage_path and os.path.isdir(self.storage_path))
 
-    def _iter_items(self, portal_project_id=None):
+    def _iter_items(self):
         if not self.enabled:
             return
         for current_project_id in sorted(os.listdir(self.storage_path)):
-            if portal_project_id and current_project_id != portal_project_id:
-                continue
             portal_path = os.path.join(self.storage_path, current_project_id)
             if current_project_id.startswith(".") or not os.path.isdir(portal_path):
                 continue
@@ -104,9 +102,9 @@ class UniPortalRequirementSource:
             "portal_project_id": portal_project_id,
         }
 
-    def discover_projects(self, portal_project_id=None):
+    def discover_projects(self):
         projects = []
-        for current_project_id, item_id, item_path in self._iter_items(portal_project_id) or []:
+        for current_project_id, item_id, item_path in self._iter_items() or []:
             if not self._find_requirement_files(item_path):
                 continue
             projects.append(self._build_project(current_project_id, item_id, item_path))

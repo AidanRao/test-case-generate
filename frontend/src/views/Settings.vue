@@ -130,49 +130,74 @@
           </div>
 
           <template v-else>
-            <div class="rounded-xl border border-slate-200 p-5">
-              <div class="flex items-start justify-between gap-4">
-                <div>
-                  <p class="text-sm font-semibold text-slate-800">{{ syncTask.name }}</p>
-                  <p class="mt-1 text-xs text-slate-500">{{ syncTask.description }}</p>
-                </div>
-                <label class="inline-flex cursor-pointer items-center gap-2 text-sm text-slate-600">
-                  <input
-                    v-model="syncTask.enabled"
-                    type="checkbox"
-                    class="h-4 w-4 rounded border-slate-300 text-sky-600"
-                  />
-                  启用
-                </label>
-              </div>
-
-              <div class="mt-5 max-w-xs">
-                <label class="mb-2 block text-sm font-medium text-slate-700">执行间隔（秒）</label>
-                <input
-                  v-model.number="syncTask.interval_seconds"
-                  type="number"
-                  min="5"
-                  max="86400"
-                  class="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-700 focus:border-sky-400 focus:outline-none disabled:bg-slate-50 disabled:text-slate-400"
-                  :disabled="!syncTask.enabled"
-                />
-                <p class="mt-2 text-xs text-slate-400">允许范围：5 - 86400 秒</p>
-              </div>
-
-              <p v-if="!syncTask.available" class="mt-4 text-xs text-amber-600">
-                当前未检测到 UniPortal 数据目录，启用后将在数据目录可用时执行。
-              </p>
-
-              <div class="mt-6 flex justify-end">
-                <button
-                  class="rounded-xl bg-sky-600 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-                  :disabled="tasksSaving"
-                  @click="saveTaskConfig"
-                >
-                  <span v-if="tasksSaving">保存中</span>
-                  <span v-else>保存任务配置</span>
-                </button>
-              </div>
+            <div class="overflow-x-auto rounded-xl border border-slate-200">
+              <table class="w-full min-w-[700px] table-fixed divide-y divide-slate-200">
+                <colgroup>
+                  <col class="w-[36%]" />
+                  <col class="w-[22%]" />
+                  <col class="w-[14%]" />
+                  <col class="w-[28%]" />
+                </colgroup>
+                <thead class="bg-slate-50">
+                  <tr>
+                    <th class="px-5 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">任务</th>
+                    <th class="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">执行间隔（秒）</th>
+                    <th class="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">启用</th>
+                    <th class="px-5 py-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">操作</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-100">
+                  <tr v-for="task in tasks" :key="task.id" class="hover:bg-slate-50">
+                    <td class="px-5 py-5">
+                      <p class="text-sm font-semibold text-slate-800">{{ task.name }}</p>
+                      <p class="mt-1 text-xs text-slate-500">{{ task.description }}</p>
+                    </td>
+                    <td class="px-4 py-5">
+                      <input
+                        v-model.number="task.interval_seconds"
+                        type="number"
+                        min="5"
+                        max="86400"
+                        class="h-10 w-32 rounded-lg border border-slate-200 px-3 text-sm text-slate-700 focus:border-sky-400 focus:outline-none disabled:bg-slate-50 disabled:text-slate-400"
+                        :disabled="!task.enabled || isTaskSaving(task.id)"
+                      />
+                      <p class="mt-1.5 text-xs text-slate-400">5 - 86400</p>
+                    </td>
+                    <td class="px-4 py-5">
+                      <label class="inline-flex cursor-pointer items-center gap-2 text-sm text-slate-600">
+                        <input
+                          v-model="task.enabled"
+                          type="checkbox"
+                          class="h-4 w-4 rounded border-slate-300 text-sky-600"
+                          :disabled="isTaskSaving(task.id)"
+                        />
+                        {{ task.enabled ? '启用' : '停用' }}
+                      </label>
+                    </td>
+                    <td class="whitespace-nowrap px-5 py-5 text-right">
+                      <div class="inline-flex items-center gap-2">
+                        <button
+                          class="rounded-full border border-sky-200 px-4 py-2 text-sm font-semibold text-sky-700 transition hover:bg-sky-50 disabled:cursor-not-allowed disabled:border-slate-100 disabled:text-slate-300"
+                          :disabled="!task.available || isTaskRunning(task.id)"
+                          @click="runTaskNow(task)"
+                        >
+                          {{ isTaskRunning(task.id) ? '执行中' : '立即执行' }}
+                        </button>
+                        <button
+                          class="rounded-full bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                          :disabled="isTaskSaving(task.id)"
+                          @click="saveTaskConfig(task)"
+                        >
+                          {{ isTaskSaving(task.id) ? '保存中' : '保存' }}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr v-if="tasks.length === 0">
+                    <td colspan="4" class="px-6 py-10 text-center text-sm text-slate-400">暂无系统任务</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </template>
         </div>
@@ -183,18 +208,21 @@
 
 <script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft, Setting, CircleCheck, CircleClose, Timer } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { getConfig, saveConfig } from '../api/aiConfig'
-import { getSystemTasks, updateSystemTask } from '../api/systemTasks'
+import { getSystemTasks, runSystemTask, updateSystemTask, type SystemTask } from '../api/systemTasks'
 
 const router = useRouter()
+const route = useRoute()
 
 const loading = ref(true)
 const saving = ref(false)
 const tasksLoading = ref(true)
-const tasksSaving = ref(false)
+const tasks = ref<SystemTask[]>([])
+const tasksSaving = reactive<Record<string, boolean>>({})
+const tasksRunning = reactive<Record<string, boolean>>({})
 
 const form = reactive({
   baseUrl: '',
@@ -204,15 +232,6 @@ const form = reactive({
 
 const testing = ref(false)
 const testResult = ref<'success' | 'error' | null>(null)
-const syncTask = reactive({
-  id: 'uniportal_sync',
-  name: 'UniPortal 项目同步',
-  description: '定期从 UniPortal 同步项目和需求数据',
-  enabled: false,
-  interval_seconds: 300,
-  available: false,
-  running: false
-})
 
 const loadConfig = async () => {
   loading.value = true
@@ -266,11 +285,7 @@ const resetForm = () => {
 const loadTasks = async () => {
   tasksLoading.value = true
   try {
-    const tasks = await getSystemTasks()
-    const task = tasks.find((item) => item.id === syncTask.id)
-    if (task) {
-      Object.assign(syncTask, task)
-    }
+    tasks.value = await getSystemTasks()
   } catch {
     ElMessage.error('定时任务配置加载失败')
   } finally {
@@ -278,29 +293,58 @@ const loadTasks = async () => {
   }
 }
 
-const saveTaskConfig = async () => {
-  const interval = Number(syncTask.interval_seconds)
+const replaceTask = (updated: SystemTask) => {
+  const index = tasks.value.findIndex((task) => task.id === updated.id)
+  if (index >= 0) {
+    tasks.value[index] = updated
+  }
+}
+
+const isTaskSaving = (taskId: string) => Boolean(tasksSaving[taskId])
+const isTaskRunning = (taskId: string) => Boolean(tasksRunning[taskId])
+
+const saveTaskConfig = async (task: SystemTask) => {
+  const interval = Number(task.interval_seconds)
   if (!Number.isInteger(interval) || interval < 5 || interval > 86400) {
     ElMessage.warning('执行间隔应为 5 至 86400 秒之间的整数')
     return
   }
-  tasksSaving.value = true
+  tasksSaving[task.id] = true
   try {
-    const task = await updateSystemTask(syncTask.id, {
-      enabled: syncTask.enabled,
+    const updated = await updateSystemTask(task.id, {
+      enabled: task.enabled,
       interval_seconds: interval
     })
-    Object.assign(syncTask, task)
+    replaceTask(updated)
     ElMessage.success('定时任务配置已保存')
   } catch {
     ElMessage.error('定时任务配置保存失败')
   } finally {
-    tasksSaving.value = false
+    tasksSaving[task.id] = false
+  }
+}
+
+const runTaskNow = async (task: SystemTask) => {
+  tasksRunning[task.id] = true
+  try {
+    const updated = await runSystemTask(task.id)
+    replaceTask(updated)
+    ElMessage.success('任务执行完成')
+  } catch {
+    ElMessage.error('任务执行失败，请检查数据源状态')
+  } finally {
+    tasksRunning[task.id] = false
   }
 }
 
 const goBack = () => {
-  router.push('/projects')
+  const portalProjectId = typeof route.query.portal_project_id === 'string'
+    ? route.query.portal_project_id
+    : null
+  router.push({
+    name: 'projects',
+    query: portalProjectId ? { portal_project_id: portalProjectId } : {}
+  })
 }
 
 const testConnection = async () => {

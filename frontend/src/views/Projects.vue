@@ -513,7 +513,10 @@ const goToTestCases = (projectId: string) => {
 }
 
 const goToSettings = () => {
-  router.push({ name: 'settings' })
+  router.push({
+    name: 'settings',
+    query: portalProjectId.value ? { portal_project_id: portalProjectId.value } : {}
+  })
 }
 
 const formatDate = (value: string) => {

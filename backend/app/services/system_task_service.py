@@ -29,3 +29,15 @@ class SystemTaskService:
             {"enabled": enabled, "interval_seconds": interval_seconds},
         )
         return (task, None) if task else (None, "not_found")
+
+    def run_task(self, task_id):
+        task = next(
+            (item for item in self.storage.list_system_tasks() if item.get("id") == task_id),
+            None,
+        )
+        if task is None:
+            return None, "not_found"
+        if not task.get("available"):
+            return None, "unavailable"
+        executed = self.storage.run_system_task(task_id)
+        return (executed, None) if executed else (None, "not_found")

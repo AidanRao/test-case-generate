@@ -82,6 +82,33 @@ class SystemTasksTest(unittest.TestCase):
             self.assertFalse(disabled["enabled"])
             self.assertFalse(disabled["running"])
 
+    def test_system_task_can_be_run_once_while_schedule_is_disabled(self):
+        with patch.dict(
+            os.environ,
+            {
+                "DATA_DIR": self.local.name,
+                "UNIPORTAL_STORAGE_PATH": self.shared.name,
+                "UNIPORTAL_SYNC_ENABLED": "false",
+            },
+            clear=False,
+        ):
+            from app import create_app
+
+            app = create_app()
+            app.testing = True
+            storage = app.config["STORAGE"]
+            client = app.test_client()
+
+            with patch.object(storage, "synchronize_uniportal") as synchronize:
+                response = client.post("/v1/system/tasks/uniportal_sync/run")
+
+            self.assertEqual(response.status_code, 200)
+            self.assertFalse(response.get_json()["data"]["enabled"])
+            synchronize.assert_called_once_with()
+
+            missing = client.post("/v1/system/tasks/missing/run")
+            self.assertEqual(missing.status_code, 404)
+
 
 if __name__ == "__main__":
     unittest.main()
