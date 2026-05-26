@@ -2,8 +2,8 @@ class ProjectService:
     def __init__(self, storage):
         self.storage = storage
 
-    def list_projects(self, keyword=None):
-        return self.storage.list_projects(keyword)
+    def list_projects(self, keyword=None, portal_project_id=None):
+        return self.storage.list_projects(keyword, portal_project_id)
 
     def get_project_counts(self, project_ids):
         return self.storage.get_project_counts(project_ids)
@@ -35,6 +35,8 @@ class ProjectService:
     def _code_exists(self, code, exclude_project_id=None):
         if not code:
             return False
+        if hasattr(self.storage, "project_code_exists"):
+            return self.storage.project_code_exists(code, exclude_project_id)
         projects = self.storage.list_projects()
         for project in projects:
             if exclude_project_id is not None and str(project.get("id")) == str(

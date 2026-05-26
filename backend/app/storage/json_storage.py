@@ -1,4 +1,5 @@
 import os
+from threading import Event, RLock, Thread
 
 from app.storage.base import StorageBackend
 from app.storage.json_io import JsonIO
@@ -6,29 +7,254 @@ from app.storage.project_store import ProjectStore
 from app.storage.requirement_store import RequirementStore
 from app.storage.testcase_store import TestCaseStore
 from app.storage.ai_config_store import AIConfigStore
+from app.storage.project_sources import (
+    LOCAL_SOURCE,
+    UNIPORTAL_SOURCE,
+)
+from app.storage.system_task_store import SystemTaskStore
+from app.storage.uniportal_source import UniPortalRequirementSource
 
 
 class JsonStorage(StorageBackend):
-    def __init__(self, data_dir):
+    UNIPORTAL_SYNC_TASK_ID = "uniportal_sync"
+
+    def __init__(
+        self,
+        data_dir,
+        uniportal_storage_path=None,
+        uniportal_sync_enabled=True,
+        uniportal_sync_interval_seconds=300,
+    ):
         self.data_dir = data_dir
         os.makedirs(self.data_dir, exist_ok=True)
         io = JsonIO(self.data_dir)
+        self.io = io
+        self._sync_lock = RLock()
+        self._sync_settings_lock = RLock()
+        self._sync_thread = None
+        self._sync_stop = Event()
+        self._sync_wakeup = Event()
+        self._sync_enabled = False
+        self._sync_interval_seconds = max(5, int(uniportal_sync_interval_seconds))
+        self.uniportal_sync_path = os.path.join(self.data_dir, "uniportal_sync.json")
         self.project_store = ProjectStore(io, os.path.join(self.data_dir, "projects.json"))
         self.testcase_store = TestCaseStore(io, os.path.join(self.data_dir, "testcases.json"))
         self.requirement_store = RequirementStore(
             io, os.path.join(self.data_dir, "requirements.json"), self.project_store
         )
         self.ai_config_store = AIConfigStore(io, os.path.join(self.data_dir, "ai_config.json"))
+        self.system_task_store = SystemTaskStore(
+            io,
+            os.path.join(self.data_dir, "system_tasks.json"),
+            [
+                {
+                    "id": self.UNIPORTAL_SYNC_TASK_ID,
+                    "name": "UniPortal 项目同步",
+                    "description": "定期从 UniPortal 同步项目和需求数据",
+                    "enabled": bool(uniportal_sync_enabled),
+                    "interval_seconds": self._sync_interval_seconds,
+                }
+            ],
+        )
+        self.uniportal_source = UniPortalRequirementSource(uniportal_storage_path)
 
-    def list_projects(self, keyword=None):
-        return self.project_store.list_projects(keyword)
+    def _load_sync_entries(self):
+        state = self.io.load(self.uniportal_sync_path, {"projects": []})
+        projects = state.get("projects", []) if isinstance(state, dict) else []
+        return [item for item in projects if isinstance(item, dict)]
+
+    def _save_sync_entries(self, entries):
+        self.io.save(self.uniportal_sync_path, {"projects": entries})
+
+    def _sync_entries_by_project_id(self):
+        return {
+            str(item.get("project_id")): item
+            for item in self._load_sync_entries()
+            if item.get("project_id")
+        }
+
+    def _project_source(self, project_id, entries_by_project_id=None):
+        entries = (
+            entries_by_project_id
+            if entries_by_project_id is not None
+            else self._sync_entries_by_project_id()
+        )
+        if str(project_id) in entries:
+            return UNIPORTAL_SOURCE
+        return LOCAL_SOURCE
+
+    def _decorate_project(self, project, entries_by_project_id=None):
+        source = self._project_source(project.get("id"), entries_by_project_id)
+        return {**project, "source": source.name}
+
+    def synchronize_uniportal(self, portal_project_id=None):
+        if not self.uniportal_source.enabled:
+            return
+        remote_projects = self.uniportal_source.discover_projects(portal_project_id)
+        with self._sync_lock:
+            entries = self._load_sync_entries()
+            entries_by_code = {
+                str(item.get("project_code")): item
+                for item in entries
+                if item.get("project_code")
+            }
+            seen_codes = set()
+            updated_entries = []
+            for remote in remote_projects:
+                project_code = str(remote["code"])
+                seen_codes.add(project_code)
+                entry = entries_by_code.get(project_code)
+                local_project = None
+                if entry:
+                    project = self.project_store.get_project(entry.get("project_id"))
+                    local_project = project.to_dict() if project else None
+                if local_project is None:
+                    local_project_id = self.project_store.create_project(
+                        {"code": project_code, "title": remote["title"]}
+                    )
+                else:
+                    local_project_id = local_project["id"]
+                    self.project_store.update_project(
+                        local_project_id,
+                        {"code": project_code, "title": remote["title"]},
+                    )
+                requirements = self.uniportal_source.list_requirements(project_code) or []
+                self.requirement_store.replace_by_project(local_project_id, requirements)
+                updated_entries.append(
+                    {
+                        "project_id": str(local_project_id),
+                        "project_code": project_code,
+                        "portal_project_id": remote["portal_project_id"],
+                    }
+                )
+
+            for entry in entries:
+                is_in_scope = (
+                    portal_project_id is None
+                    or entry.get("portal_project_id") == portal_project_id
+                )
+                if is_in_scope and str(entry.get("project_code")) not in seen_codes:
+                    project_id = entry.get("project_id")
+                    self.project_store.delete_project(project_id)
+                    self.requirement_store.delete_by_project(project_id)
+                    self.testcase_store.delete_by_project(project_id)
+                    continue
+                if not is_in_scope:
+                    updated_entries.append(entry)
+            self._save_sync_entries(updated_entries)
+
+    def _task_runtime(self, task):
+        available = self.uniportal_source.enabled
+        with self._sync_settings_lock:
+            running = bool(
+                task.get("enabled")
+                and self._sync_thread
+                and self._sync_thread.is_alive()
+            )
+        return {**task, "available": available, "running": running}
+
+    def list_system_tasks(self):
+        return [
+            self._task_runtime(task)
+            for task in self.system_task_store.list_tasks()
+        ]
+
+    def save_system_task(self, task_id, payload):
+        task = self.system_task_store.save_task(task_id, payload)
+        if task is None:
+            return None
+        self._apply_system_task(task)
+        return self._task_runtime(task)
+
+    def start_system_tasks(self):
+        for task in self.system_task_store.list_tasks():
+            self._apply_system_task(task)
+
+    def _apply_system_task(self, task):
+        if task.get("id") != self.UNIPORTAL_SYNC_TASK_ID:
+            return
+        self.configure_uniportal_sync(
+            bool(task.get("enabled")),
+            int(task.get("interval_seconds", 30)),
+        )
+
+    def configure_uniportal_sync(self, enabled, interval_seconds):
+        with self._sync_settings_lock:
+            self._sync_enabled = bool(enabled)
+            self._sync_interval_seconds = max(5, int(interval_seconds))
+            should_start = (
+                self._sync_enabled
+                and (self._sync_thread is None or not self._sync_thread.is_alive())
+            )
+            if should_start:
+                self._sync_stop.clear()
+                self._sync_thread = Thread(
+                    target=self._run_uniportal_sync,
+                    daemon=True,
+                    name="uniportal-sync",
+                )
+                self._sync_thread.start()
+        self._sync_wakeup.set()
+
+    def _run_uniportal_sync(self):
+        while not self._sync_stop.is_set():
+            with self._sync_settings_lock:
+                enabled = self._sync_enabled
+            if enabled:
+                try:
+                    self.synchronize_uniportal()
+                except Exception as exc:
+                    print(f"UniPortal sync failed: {exc}")
+            with self._sync_settings_lock:
+                interval_seconds = self._sync_interval_seconds
+            timeout = interval_seconds if enabled else None
+            self._sync_wakeup.wait(timeout)
+            self._sync_wakeup.clear()
+
+    def stop_system_tasks(self):
+        self._sync_stop.set()
+        self._sync_wakeup.set()
+        if self._sync_thread is not None:
+            self._sync_thread.join(timeout=1)
+        self._sync_thread = None
+
+    def list_projects(self, keyword=None, portal_project_id=None):
+        if portal_project_id:
+            self.synchronize_uniportal(portal_project_id)
+        with self._sync_lock:
+            entries_by_project_id = self._sync_entries_by_project_id()
+            portal_project_ids = {
+                str(item.get("project_id"))
+                for item in entries_by_project_id.values()
+                if item.get("portal_project_id") == portal_project_id
+            }
+            projects = []
+            for project in self.project_store.list_projects(keyword):
+                source = self._project_source(project.get("id"), entries_by_project_id)
+                if portal_project_id:
+                    if str(project.get("id")) not in portal_project_ids:
+                        continue
+                elif source.name != LOCAL_SOURCE.name:
+                    continue
+                projects.append({**project, "source": source.name})
+            return projects
 
     def get_project_counts(self, project_ids):
         return self.requirement_store.get_project_counts(project_ids)
 
     def get_project(self, project_id):
         project = self.project_store.get_project(project_id)
-        return project.to_dict() if project else None
+        if project:
+            return self._decorate_project(project.to_dict())
+        return None
+
+    def project_code_exists(self, code, exclude_project_id=None):
+        for project in self.project_store.list_projects():
+            if exclude_project_id is not None and str(project["id"]) == str(exclude_project_id):
+                continue
+            if project.get("code") == code:
+                return True
+        return False
 
     def create_project(self, payload):
         return self.project_store.create_project(payload)
@@ -48,6 +274,9 @@ class JsonStorage(StorageBackend):
 
     def get_requirement(self, project_id, requirement_id):
         return self.requirement_store.get_requirement(project_id, requirement_id)
+
+    def is_read_only_project(self, project_id):
+        return self._project_source(project_id).read_only
 
     def update_requirement(self, project_id, requirement_id, payload):
         return self.requirement_store.update_requirement(project_id, requirement_id, payload)

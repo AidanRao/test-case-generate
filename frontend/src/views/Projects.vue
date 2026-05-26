@@ -15,6 +15,7 @@
             <p class="text-xs font-semibold text-slate-500">快捷操作</p>
             <div class="mt-4 space-y-2">
               <button
+                v-if="!portalProjectId"
                 class="flex w-full items-center justify-start gap-2 rounded-xl bg-sky-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-sky-700"
                 type="button"
                 @click="openCreateDialog"
@@ -128,56 +129,67 @@
                 <span>条</span>
               </div>
             </div>
-            <table class="min-w-full divide-y divide-slate-200">
+            <div class="overflow-x-auto">
+            <table class="w-full min-w-[780px] table-fixed divide-y divide-slate-200">
+              <colgroup>
+                <col class="w-[34%]" />
+                <col class="w-[14%]" />
+                <col class="w-[14%]" />
+                <col class="w-[38%]" />
+              </colgroup>
               <thead class="bg-slate-50">
                 <tr>
                   <th class="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">项目名称</th>
-                  <th class="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">一级功能数</th>
-                  <th class="px-6 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">二级需求数</th>
-                  <th class="px-6 py-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">操作</th>
+                  <th class="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">一级功能数</th>
+                  <th class="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">二级需求数</th>
+                  <th class="px-4 py-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">操作</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100">
                 <tr v-for="(project, index) in paginatedRows" :key="project.id" class="hover:bg-slate-50">
                   <td class="px-6 py-5">
                     <div class="flex items-center gap-3">
-                      <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-100 text-sky-600">
+                      <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-100 text-sky-600">
                         {{ pageStartIndex + index + 1 }}
                       </div>
-                      <div>
-                        <p class="text-sm font-semibold text-slate-900">{{ project.name }}</p>
-                        <p class="mt-1 text-xs text-slate-500">项目编号：{{ project.code }}</p>
+                      <div class="min-w-0">
+                        <p class="truncate text-sm font-semibold text-slate-900" :title="project.name">{{ project.name }}</p>
+                        <p class="mt-1 truncate text-xs text-slate-500" :title="`项目编号：${project.code}`">项目编号：{{ project.code }}</p>
                       </div>
                     </div>
                   </td>
-                  <td class="px-6 py-5">
-                    <div class="inline-flex items-center rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                  <td class="px-4 py-5">
+                    <div class="inline-flex whitespace-nowrap rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
                       {{ project.moduleCount }} 个功能
                     </div>
                   </td>
-                  <td class="px-6 py-5">
-                    <div class="inline-flex items-center rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
+                  <td class="px-4 py-5">
+                    <div class="inline-flex whitespace-nowrap rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
                       {{ project.requirementCount }} 条需求
                     </div>
                   </td>
-                  <td class="px-6 py-5 text-right">
-                    <div class="inline-flex items-center gap-2">
+                  <td class="whitespace-nowrap px-4 py-5 text-right">
+                    <div class="inline-flex items-center gap-2 whitespace-nowrap">
                       <button
-                        class="inline-flex items-center gap-2 rounded-full bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-700"
+                        class="inline-flex whitespace-nowrap items-center gap-2 rounded-full bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-700"
                         @click="goToTestCases(project.id)"
                       >
                         进入项目
                         <span class="text-base">→</span>
                       </button>
                       <button
-                        class="inline-flex items-center rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-700"
+                        class="inline-flex whitespace-nowrap items-center rounded-full border px-4 py-2 text-sm font-semibold transition"
+                        :class="project.source === 'uniportal' ? 'cursor-not-allowed border-slate-100 text-slate-300' : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-700'"
+                        :disabled="project.source === 'uniportal'"
                         @click="openEditDialog(project)"
                       >
                         编辑
                       </button>
                       <button
-                        class="inline-flex items-center rounded-full border border-rose-200 px-4 py-2 text-sm font-semibold text-rose-600 transition hover:border-rose-300 hover:text-rose-700"
-                        @click="removeProject(project.id)"
+                        class="inline-flex whitespace-nowrap items-center rounded-full border px-4 py-2 text-sm font-semibold transition"
+                        :class="project.source === 'uniportal' ? 'cursor-not-allowed border-slate-100 text-slate-300' : 'border-rose-200 text-rose-600 hover:border-rose-300 hover:text-rose-700'"
+                        :disabled="project.source === 'uniportal'"
+                        @click="removeProject(project)"
                       >
                         删除
                       </button>
@@ -191,6 +203,7 @@
                 </tr>
               </tbody>
             </table>
+            </div>
             <PaginationBar
               :total-items="filteredRows.length"
               :current-page="currentPage"
@@ -236,6 +249,9 @@ import { loadRecentProjects, recordProjectVisit } from '../data/recentProjectSto
 
 const router = useRouter()
 const route = useRoute()
+const portalProjectId = computed(() => typeof route.query.portal_project_id === 'string'
+  ? route.query.portal_project_id
+  : null)
 
 const activeSection = ref<'projects' | 'knowledge'>(route.query.tab === 'knowledge' ? 'knowledge' : 'projects')
 
@@ -259,7 +275,7 @@ watch(activeSection, (value) => {
   router.replace({ query: { ...route.query, tab: value } })
 })
 
-const projects = ref<ProjectRecord[]>(loadProjects())
+const projects = ref<ProjectRecord[]>(portalProjectId.value ? [] : loadProjects())
 const knowledgeItems = ref<KnowledgeBaseItem[]>(loadKnowledgeBase())
 const recentEntries = ref(loadRecentProjects())
 const knowledgeCreateSignal = ref(0)
@@ -316,6 +332,9 @@ const filteredRows = computed(() => {
 
 const emptyText = computed(() => {
   if (projects.value.length === 0) {
+    if (portalProjectId.value) {
+      return '当前 UniPortal 工程暂无项目'
+    }
     return '暂无项目，请先新建项目'
   }
   if (searchText.value.trim()) {
@@ -364,6 +383,9 @@ const dialogInitial = reactive({
 })
 
 const openCreateDialog = () => {
+  if (portalProjectId.value) {
+    return
+  }
   dialogInitial.name = ''
   dialogInitial.code = ''
   dialogInitial.modules = []
@@ -378,6 +400,9 @@ const openKnowledgeCreate = () => {
 }
 
 const openEditDialog = (project: ProjectRecord) => {
+  if (project.source === 'uniportal') {
+    return
+  }
   editingProjectId.value = project.id
   dialogInitial.name = project.name
   dialogInitial.code = project.code
@@ -432,6 +457,7 @@ const handleDialogSubmit = async (payload: {
       name: basePayload.name,
       code: basePayload.code,
       modules: basePayload.modules,
+      source: 'local' as const,
       moduleCount: basePayload.modules.length,
       requirementCount: buildRequirements(basePayload.modules).length
     }
@@ -455,7 +481,11 @@ const handleKnowledgeUpdate = (items: KnowledgeBaseItem[]) => {
   saveKnowledgeBase(items)
 }
 
-const removeProject = async (projectId: string) => {
+const removeProject = async (project: ProjectRecord) => {
+  if (project.source === 'uniportal') {
+    return
+  }
+  const projectId = project.id
   const confirmed = window.confirm('确定要删除该项目吗？删除后无法恢复。')
   if (!confirmed) {
     return
@@ -474,7 +504,11 @@ const removeProject = async (projectId: string) => {
 }
 
 const goToTestCases = (projectId: string) => {
-  router.push({ name: 'test-cases', params: { projectId } })
+  router.push({
+    name: 'test-cases',
+    params: { projectId },
+    query: portalProjectId.value ? { portal_project_id: portalProjectId.value } : {}
+  })
   recentEntries.value = recordProjectVisit(projectId)
 }
 
@@ -490,7 +524,14 @@ const formatDate = (value: string) => {
   return date.toLocaleDateString()
 }
 
-const mapApiProjects = (list: Array<{ id: string; code: string; title: string; module_count: number; requirement_count: number }>) => {
+const mapApiProjects = (list: Array<{
+  id: string
+  code: string
+  title: string
+  source: 'local' | 'uniportal'
+  module_count: number
+  requirement_count: number
+}>) => {
   const localProjects = loadProjects()
   return list.map((item) => {
     const matched = localProjects.find((project) => project.code === item.code)
@@ -499,6 +540,7 @@ const mapApiProjects = (list: Array<{ id: string; code: string; title: string; m
       name: item.title,
       code: item.code,
       modules: matched?.modules ?? [],
+      source: item.source,
       moduleCount: item.module_count,
       requirementCount: item.requirement_count
     }
@@ -507,12 +549,19 @@ const mapApiProjects = (list: Array<{ id: string; code: string; title: string; m
 
 const loadRemoteProjects = async () => {
   try {
-    const list = await fetchProjectList()
+    const list = await fetchProjectList(portalProjectId.value)
     projects.value = mapApiProjects(list)
   } catch {
-    projects.value = loadProjects()
+    projects.value = portalProjectId.value ? [] : loadProjects()
   }
 }
+
+watch(portalProjectId, (value) => {
+  if (value) {
+    projects.value = []
+  }
+  loadRemoteProjects()
+})
 
 onMounted(() => {
   loadRemoteProjects()

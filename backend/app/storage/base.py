@@ -1,11 +1,23 @@
 class StorageBackend:
-    def list_projects(self, keyword=None):
+    def list_projects(self, keyword=None, portal_project_id=None):
         raise NotImplementedError()
 
     def get_project_counts(self, project_ids):
         raise NotImplementedError()
 
     def get_project(self, project_id):
+        raise NotImplementedError()
+
+    def list_system_tasks(self):
+        raise NotImplementedError()
+
+    def save_system_task(self, task_id, payload):
+        raise NotImplementedError()
+
+    def start_system_tasks(self):
+        raise NotImplementedError()
+
+    def stop_system_tasks(self):
         raise NotImplementedError()
 
     def create_project(self, payload):

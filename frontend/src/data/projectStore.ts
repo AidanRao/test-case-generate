@@ -9,6 +9,7 @@ export interface ProjectRecord {
   modules: ModuleGroup[]
   moduleCount?: number
   requirementCount?: number
+  source?: 'local' | 'uniportal'
 }
 
 const storageKey = 'project-list'
@@ -28,7 +29,8 @@ const getFallbackProjects = (): ProjectRecord[] => [
     id: 'local-1',
     name: projectName,
     code: 'PRJ-001',
-    modules: defaultModules
+    modules: defaultModules,
+    source: 'local'
   }
 ]
 
@@ -45,7 +47,7 @@ const loadProjects = (): ProjectRecord[] => {
     if (!Array.isArray(parsed)) {
       return getFallbackProjects()
     }
-    const normalized = parsed.map((item, index) => ({
+    const normalized: ProjectRecord[] = parsed.map((item, index) => ({
       id: typeof item?.id === 'string'
         ? item.id
         : typeof item?.id === 'number'
@@ -55,7 +57,8 @@ const loadProjects = (): ProjectRecord[] => {
       code: typeof item?.code === 'string' ? item.code : `PRJ-${String(index + 1).padStart(3, '0')}`,
       modules: Array.isArray(item?.modules) ? item.modules : [],
       moduleCount: typeof item?.moduleCount === 'number' ? item.moduleCount : undefined,
-      requirementCount: typeof item?.requirementCount === 'number' ? item.requirementCount : undefined
+      requirementCount: typeof item?.requirementCount === 'number' ? item.requirementCount : undefined,
+      source: item?.source === 'uniportal' ? 'uniportal' : 'local'
     }))
     return normalized.length > 0 ? normalized : getFallbackProjects()
   } catch {

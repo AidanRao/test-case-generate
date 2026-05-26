@@ -6,6 +6,7 @@ type ProjectListResponse = {
     id: string
     code: string
     title: string
+    source: 'local' | 'uniportal'
     module_count: number
     requirement_count: number
   }>
@@ -15,6 +16,7 @@ type ProjectDetailResponse = {
   id: string
   code: string
   title: string
+  source: 'local' | 'uniportal'
   requirements: Array<{
     id: string
     title: string
@@ -78,8 +80,11 @@ export type CreateRequirementPayload = {
   module: string
 }
 
-const fetchProjectList = async () => {
-  const response = await requestJson<ProjectListResponse>('/projects')
+const fetchProjectList = async (portalProjectId?: string | null) => {
+  const suffix = portalProjectId
+    ? `?portal_project_id=${encodeURIComponent(portalProjectId)}`
+    : ''
+  const response = await requestJson<ProjectListResponse>(`/projects${suffix}`)
   return response.data.list ?? []
 }
 

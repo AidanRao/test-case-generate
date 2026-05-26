@@ -113,7 +113,8 @@ class RequirementStore:
                 new_req = Requirement.from_dict(
                     req, module=module, project_id=project_id_value
                 )
-                new_req.id = new_uuid()
+                if not new_req.id:
+                    new_req.id = new_uuid()
                 if not new_req.code:
                     new_req.code = f"REQ-{new_req.id.split('-')[0]}"
                 stored.append(new_req.to_dict())
@@ -152,6 +153,21 @@ class RequirementStore:
             return False
         self._save_requirements(filtered)
         return True
+
+    def replace_by_project(self, project_id, requirements):
+        stored = [
+            item
+            for item in self._load_requirements()
+            if str(item.get("project_id")) != str(project_id)
+        ]
+        for item in requirements:
+            requirement = Requirement.from_dict(item, project_id=str(project_id))
+            if not requirement.id:
+                requirement.id = new_uuid()
+            if not requirement.code:
+                requirement.code = f"REQ-{requirement.id.split('-')[0]}"
+            stored.append(requirement.to_dict())
+        self._save_requirements(stored)
 
     def get_project_counts(self, project_ids):
         counts = {str(project_id): {"module_count": 0, "requirement_count": 0} for project_id in project_ids}

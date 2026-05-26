@@ -10,7 +10,10 @@ projects_bp = Blueprint("projects", __name__)
 def list_projects():
     storage = current_app.config["STORAGE"]
     service = ProjectService(storage)
-    projects = service.list_projects()
+    projects = service.list_projects(
+        keyword=request.args.get("keyword"),
+        portal_project_id=request.args.get("portal_project_id"),
+    )
     project_ids = [project.get("id") for project in projects]
     counts = service.get_project_counts(project_ids)
     data = {
@@ -19,6 +22,7 @@ def list_projects():
                 "id": p.get("id"),
                 "code": p.get("code"),
                 "title": p.get("title"),
+                "source": p.get("source", "local"),
                 "module_count": counts.get(str(p.get("id")), {}).get("module_count", 0),
                 "requirement_count": counts.get(str(p.get("id")), {}).get(
                     "requirement_count", 0
@@ -65,6 +69,8 @@ def get_project(project_id):
 def update_project(project_id):
     payload = request.get_json(silent=True) or {}
     storage = current_app.config["STORAGE"]
+    if storage.is_read_only_project(project_id):
+        return error(40301, "UniPortal 来源项目为只读，请在 UniPortal 中管理", 403)
     service = ProjectService(storage)
     updated, err = service.update_project(project_id, payload)
     if err == "duplicate":
@@ -77,6 +83,8 @@ def update_project(project_id):
 @projects_bp.delete("/projects/<project_id>")
 def delete_project(project_id):
     storage = current_app.config["STORAGE"]
+    if storage.is_read_only_project(project_id):
+        return error(40301, "UniPortal 来源项目为只读，请在 UniPortal 中管理", 403)
     service = ProjectService(storage)
     deleted = service.delete_project(project_id)
     if not deleted:

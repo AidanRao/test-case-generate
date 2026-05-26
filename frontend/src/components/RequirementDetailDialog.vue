@@ -15,7 +15,9 @@
           <div class="mt-3 flex items-center gap-2">
             <button
               v-if="!isEditing"
-              class="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-700"
+              class="rounded-full border px-3 py-1 text-xs font-semibold transition"
+              :class="readOnly ? 'cursor-not-allowed border-slate-100 text-slate-300' : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-700'"
+              :disabled="readOnly"
               type="button"
               @click="startEdit"
             >
@@ -23,7 +25,9 @@
             </button>
             <button
               v-if="!isEditing"
-              class="rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-600 transition hover:border-rose-300 hover:text-rose-700"
+              class="rounded-full border px-3 py-1 text-xs font-semibold transition"
+              :class="readOnly ? 'cursor-not-allowed border-slate-100 text-slate-300' : 'border-rose-200 text-rose-600 hover:border-rose-300 hover:text-rose-700'"
+              :disabled="readOnly"
               type="button"
               @click="handleDelete"
             >
@@ -176,6 +180,7 @@ const props = defineProps<{
   requirement: RequirementDetailItem | null
   testcases: RequirementTestCaseItem[]
   isGenerating?: boolean
+  readOnly?: boolean
 }>()
 
 const emit = defineEmits<{

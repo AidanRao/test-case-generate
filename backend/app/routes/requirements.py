@@ -33,6 +33,8 @@ def get_requirement(project_id, requirement_id):
 def update_requirement(project_id, requirement_id):
     payload = request.get_json(silent=True) or {}
     storage = current_app.config["STORAGE"]
+    if storage.is_read_only_project(project_id):
+        return error(40301, "UniPortal 来源需求为只读，请在 UniPortal 中管理", 403)
     service = RequirementService(storage)
     updated = service.update_requirement(project_id, requirement_id, payload)
     if not updated:
@@ -46,6 +48,8 @@ def complete_requirements(project_id):
     requirements = payload.get("requirements", [])
     scope = payload.get("scope", "project")
     storage = current_app.config["STORAGE"]
+    if storage.is_read_only_project(project_id):
+        return error(40301, "UniPortal 来源需求为只读，请在 UniPortal 中管理", 403)
     service = RequirementService(storage)
     result = service.complete_requirements(project_id, requirements, scope)
     if result is None:
@@ -57,6 +61,8 @@ def complete_requirements(project_id):
 def create_requirement(project_id):
     payload = request.get_json(silent=True) or {}
     storage = current_app.config["STORAGE"]
+    if storage.is_read_only_project(project_id):
+        return error(40301, "UniPortal 来源需求为只读，请在 UniPortal 中管理", 403)
     service = RequirementService(storage)
     new_req = service.create_requirement(project_id, payload)
     if new_req is None:
@@ -67,6 +73,8 @@ def create_requirement(project_id):
 @requirements_bp.delete("/projects/<project_id>/requirements/<requirement_id>")
 def delete_requirement(project_id, requirement_id):
     storage = current_app.config["STORAGE"]
+    if storage.is_read_only_project(project_id):
+        return error(40301, "UniPortal 来源需求为只读，请在 UniPortal 中管理", 403)
     service = RequirementService(storage)
     deleted = service.delete_requirement(project_id, requirement_id)
     if deleted is None:

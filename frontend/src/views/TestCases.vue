@@ -22,18 +22,14 @@
           >
             生成测试用例
           </button>
-            <el-tooltip
-              content="根据当前需求，智能推断出隐藏的需求，完善需求文档"
-              placement="top"
-              :show-after="200"
+            <button
+              class="rounded-full border px-3 py-1 text-xs font-semibold transition"
+              :class="isReadOnlyProject ? 'cursor-not-allowed border-slate-100 text-slate-300' : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'"
+              :disabled="isReadOnlyProject"
+              type="button"
             >
-              <button
-                class="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
-                type="button"
-              >
-                需求补全
-              </button>
-            </el-tooltip>
+              需求补全
+            </button>
           </div>
         </div>
         <div class="flex min-h-0 flex-1 flex-col gap-5 px-5 py-4">
@@ -108,6 +104,7 @@
     :requirement="detailRequirement"
     :testcases="detailTestcases"
     :is-generating="detailRequirementGenerating"
+    :read-only="isReadOnlyProject"
     @open-testcase="openTestcaseDetail"
     @save="handleRequirementSave"
     @delete="handleRequirementDelete"
@@ -202,6 +199,7 @@ type RemoteModuleGroup = ModuleGroup & { requirements: RemoteRequirement[] }
 
 const remoteModules = ref<RemoteModuleGroup[] | null>(null)
 const remoteProjectTitle = ref<string | null>(null)
+const remoteProjectSource = ref<'local' | 'uniportal' | null>(null)
 
 const moduleGroups = computed<ModuleGroup[]>(() => remoteModules.value ?? currentProject.value?.modules ?? [])
 const requirements = computed<RequirementWithCases[]>(() => buildRequirements(moduleGroups.value) as RequirementWithCases[])
@@ -226,6 +224,9 @@ const requirementGeneratingMap = computed(() => {
   return map
 })
 const projectName = computed(() => remoteProjectTitle.value ?? currentProject.value?.name ?? '项目')
+const isReadOnlyProject = computed(() => (
+  remoteProjectSource.value === 'uniportal' || currentProject.value?.source === 'uniportal'
+))
 const selectedRequirementIndex = ref(0)
 const requirementTypeStats = computed(() => {
   const stats = new Map<string, number>()
@@ -354,6 +355,9 @@ const openTestcaseDetail = (item: TestCaseDetailItem) => {
 }
 
 const handleRequirementSave = async (payload: RequirementDetailItem) => {
+  if (isReadOnlyProject.value) {
+    return
+  }
   if (!isRemoteProject.value) {
     window.alert('本地项目暂不支持修改需求')
     return
@@ -391,6 +395,9 @@ const handleRequirementSave = async (payload: RequirementDetailItem) => {
 }
 
 const handleRequirementDelete = async (payload: RequirementDetailItem) => {
+  if (isReadOnlyProject.value) {
+    return
+  }
   if (!isRemoteProject.value) {
     window.alert('本地项目暂不支持删除需求')
     return
@@ -419,12 +426,18 @@ const handleRequirementDelete = async (payload: RequirementDetailItem) => {
 
 // 处理新增需求菜单项点击
 const handleCreateRequirement = (module: string) => {
+  if (isReadOnlyProject.value) {
+    return
+  }
   selectedModule.value = module
   createRequirementVisible.value = true
 }
 
 // 处理新增需求表单提交
 const handleRequirementCreate = async (payload: CreateRequirementForm) => {
+  if (isReadOnlyProject.value) {
+    return
+  }
   if (!isRemoteProject.value) {
     window.alert('本地项目暂不支持新增需求')
     return
@@ -558,7 +571,13 @@ const handleTestcaseDelete = async (payload: TestCaseDetailItem) => {
 }
 
 const goBack = () => {
-  router.push({ name: 'projects' })
+  const portalProjectId = typeof route.query.portal_project_id === 'string'
+    ? route.query.portal_project_id
+    : null
+  router.push({
+    name: 'projects',
+    query: portalProjectId ? { portal_project_id: portalProjectId } : {}
+  })
 }
 
 
@@ -778,15 +797,18 @@ const loadRemoteProjectDetail = async () => {
   if (!remoteId) {
     remoteModules.value = null
     remoteProjectTitle.value = null
+    remoteProjectSource.value = null
     return
   }
   try {
     const detail = await fetchProjectDetail(remoteId)
     remoteProjectTitle.value = detail.title
+    remoteProjectSource.value = detail.source
     remoteModules.value = mapRemoteModules(detail.requirements ?? [])
   } catch {
     remoteModules.value = null
     remoteProjectTitle.value = null
+    remoteProjectSource.value = null
   }
 }
 

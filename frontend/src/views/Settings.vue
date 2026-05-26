@@ -110,6 +110,73 @@
           </template>
         </div>
       </div>
+
+      <div class="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div class="border-b border-slate-100 px-6 py-4">
+          <div class="flex items-center gap-3">
+            <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-100">
+              <el-icon class="text-lg text-sky-600"><Timer /></el-icon>
+            </div>
+            <div>
+              <h2 class="text-base font-semibold text-slate-900">系统定时任务</h2>
+              <p class="text-xs text-slate-500">管理后台数据同步任务的运行状态和执行间隔</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="p-6">
+          <div v-if="tasksLoading" class="flex justify-center py-8">
+            <el-spinner class="text-sky-600" />
+          </div>
+
+          <template v-else>
+            <div class="rounded-xl border border-slate-200 p-5">
+              <div class="flex items-start justify-between gap-4">
+                <div>
+                  <p class="text-sm font-semibold text-slate-800">{{ syncTask.name }}</p>
+                  <p class="mt-1 text-xs text-slate-500">{{ syncTask.description }}</p>
+                </div>
+                <label class="inline-flex cursor-pointer items-center gap-2 text-sm text-slate-600">
+                  <input
+                    v-model="syncTask.enabled"
+                    type="checkbox"
+                    class="h-4 w-4 rounded border-slate-300 text-sky-600"
+                  />
+                  启用
+                </label>
+              </div>
+
+              <div class="mt-5 max-w-xs">
+                <label class="mb-2 block text-sm font-medium text-slate-700">执行间隔（秒）</label>
+                <input
+                  v-model.number="syncTask.interval_seconds"
+                  type="number"
+                  min="5"
+                  max="86400"
+                  class="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-700 focus:border-sky-400 focus:outline-none disabled:bg-slate-50 disabled:text-slate-400"
+                  :disabled="!syncTask.enabled"
+                />
+                <p class="mt-2 text-xs text-slate-400">允许范围：5 - 86400 秒</p>
+              </div>
+
+              <p v-if="!syncTask.available" class="mt-4 text-xs text-amber-600">
+                当前未检测到 UniPortal 数据目录，启用后将在数据目录可用时执行。
+              </p>
+
+              <div class="mt-6 flex justify-end">
+                <button
+                  class="rounded-xl bg-sky-600 px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+                  :disabled="tasksSaving"
+                  @click="saveTaskConfig"
+                >
+                  <span v-if="tasksSaving">保存中</span>
+                  <span v-else>保存任务配置</span>
+                </button>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -117,14 +184,17 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { ArrowLeft, Setting, CircleCheck, CircleClose } from '@element-plus/icons-vue'
+import { ArrowLeft, Setting, CircleCheck, CircleClose, Timer } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import { getConfig, saveConfig } from '../api/aiConfig'
+import { getSystemTasks, updateSystemTask } from '../api/systemTasks'
 
 const router = useRouter()
 
 const loading = ref(true)
 const saving = ref(false)
+const tasksLoading = ref(true)
+const tasksSaving = ref(false)
 
 const form = reactive({
   baseUrl: '',
@@ -134,6 +204,15 @@ const form = reactive({
 
 const testing = ref(false)
 const testResult = ref<'success' | 'error' | null>(null)
+const syncTask = reactive({
+  id: 'uniportal_sync',
+  name: 'UniPortal 项目同步',
+  description: '定期从 UniPortal 同步项目和需求数据',
+  enabled: false,
+  interval_seconds: 300,
+  available: false,
+  running: false
+})
 
 const loadConfig = async () => {
   loading.value = true
@@ -182,6 +261,42 @@ const resetForm = () => {
   form.baseUrl = ''
   form.model = ''
   testResult.value = null
+}
+
+const loadTasks = async () => {
+  tasksLoading.value = true
+  try {
+    const tasks = await getSystemTasks()
+    const task = tasks.find((item) => item.id === syncTask.id)
+    if (task) {
+      Object.assign(syncTask, task)
+    }
+  } catch {
+    ElMessage.error('定时任务配置加载失败')
+  } finally {
+    tasksLoading.value = false
+  }
+}
+
+const saveTaskConfig = async () => {
+  const interval = Number(syncTask.interval_seconds)
+  if (!Number.isInteger(interval) || interval < 5 || interval > 86400) {
+    ElMessage.warning('执行间隔应为 5 至 86400 秒之间的整数')
+    return
+  }
+  tasksSaving.value = true
+  try {
+    const task = await updateSystemTask(syncTask.id, {
+      enabled: syncTask.enabled,
+      interval_seconds: interval
+    })
+    Object.assign(syncTask, task)
+    ElMessage.success('定时任务配置已保存')
+  } catch {
+    ElMessage.error('定时任务配置保存失败')
+  } finally {
+    tasksSaving.value = false
+  }
 }
 
 const goBack = () => {
@@ -234,5 +349,6 @@ const testConnection = async () => {
 
 onMounted(() => {
   loadConfig()
+  loadTasks()
 })
 </script>
