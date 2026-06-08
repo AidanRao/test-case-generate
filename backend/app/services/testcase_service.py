@@ -1,3 +1,5 @@
+import time
+
 from openai import OpenAI
 
 from app.utils.ids import new_uuid
@@ -10,6 +12,7 @@ class TestCaseService:
         self.config = config
 
     def generate_testcases(self, project_id, requirement_ids, replace=False, ai_config=None):
+        started_at = time.time()
         generator = self._build_generator(ai_config)
         if generator is None:
             return None, "missing_api_key"
@@ -34,6 +37,15 @@ class TestCaseService:
                 )
             self.storage.add_testcases(project_id, requirement.get("id"), mapped)
             results.extend(mapped)
+        self.storage.save_project_quality(
+            project_id,
+            {
+                "duration": time.time() - started_at,
+                "fail_count": 0,
+                "iterations": len(requirement_ids),
+                "success_count": len(results),
+            },
+        )
         return results, None
 
     def list_testcases(self, project_id, requirement_id):

@@ -1,0 +1,36 @@
+[
+    {
+        "module": "座舱压力控制系统",
+        "requirements": [
+            {
+                "title": "软件运行环境计算资源预留余量",
+                "type": "余量需求",
+                "code": "SwRD_001",
+                "content": "为保证后续扩展，飞行控制软件在标准任务剖面下的 CPU 平均占用率应不超过 60%，静态内存（RAM）占用率应不超过 50%，以确保系统在极端负载下仍有处理余量。"
+            },
+            {
+                "title": "多余度控制通道无缝切换机制",
+                "type": "可靠性需求",
+                "code": "SwRD_002",
+                "content": "余度管理模块应实现三余度机箱同步。当主控制通道发生硬件失效或连续 3 个周期 未更新心跳信号 Heartbeat_Main 时，系统应在 10ms 内切换至备用通道，并保持控制输出的平滑连续。"
+            },
+            {
+                "title": "自主飞行模式紧急终止与平飞保护",
+                "type": "安全性需求",
+                "code": "SwRD_003",
+                "content": "软件应设置独立的\"自主飞行紧急终止\"功能。当触发指令 Emergency_Stop = 1 或链路中断时长超过 30s 时，软件必须立即禁止自主飞行（Inhibit），并自动切入平飞保护模式。"
+            }
+        ]
+    },
+    {
+        "module": "座舱风速显示系统",
+        "requirements": [
+            {
+                "title": "风速系统显示软件输出风显示标识",
+                "type": "功能需求",
+                "code": "SwRD_101",
+                "content": "风速系统显示软件应输出风显示标识 WindVisible，其取值为 0 或 1，用于表征风信息在飞行显示上的可见状态。在满足显示配置条件且风速有效标识 WindSpeedFMSSideIsValid = 1 的前提下，系统应结合真实风向与真实航向的有效性对 WindVisible 进行判定。\n当真实风向有效标识 WindDirectionTrueFMSSideIsValid = 1 且真实航向有效标识 TrueRefHeadingIsValid = 1 时，系统应将风显示标识 WindVisible 置为 1；当 WindDirectionTrueFMSSideIsValid = 0 或 TrueRefHeadingIsValid = 0 时，系统应将 WindVisible 置为 0。上述判定逻辑在 PFD 模式（DuConfig = 1） 和 MFD 模式（DuConfig = 0） 下均应一致生效，并正确反映在对应的飞行显示界面中。"
+            }
+        ]
+    }
+]

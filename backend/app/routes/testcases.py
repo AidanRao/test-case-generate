@@ -240,26 +240,6 @@ def _calculate_iterations(requirement_count):
     return int(round(value))
 
 
-def _build_req_type_stats(testcases):
-    keys = [
-        "功能测试",
-        "可靠性测试",
-        "安全性测试",
-        "强度测试",
-        "性能测试",
-        "接口测试",
-        "数据处理测试",
-        "边界测试",
-    ]
-    stats = {k: 0 for k in keys}
-    for tc in testcases or []:
-        t = tc.get("type") or "功能测试"
-        if t not in stats:
-            stats[t] = 0
-        stats[t] += 1
-    return stats
-
-
 def _render_testcases_md(testcases, requirements_by_id):
     if not testcases:
         return ""
@@ -396,9 +376,10 @@ def integration_generate_testcases():
         "duration": duration,
         "fail_count": fail_count,
         "iterations": _calculate_iterations(requirement_count),
-        "req_type_stats": _build_req_type_stats(results),
         "success_count": len(results),
     }
+    if is_save:
+        storage.save_project_quality(project_id, quality_info)
     if fmt == "md":
         test_case = _render_testcases_md(results, requirements_by_id)
     else:

@@ -52,6 +52,13 @@ type GenerateTestcasesStatusResponse = {
   status: 'idle' | 'running' | 'done'
 }
 
+export type QualityInfoResponse = {
+  success_count: number
+  fail_count: number
+  iterations: number
+  duration: number
+}
+
 type DeleteProjectResponse = {
   deleted: boolean
 }
@@ -119,6 +126,11 @@ const fetchTestcaseGenerateStatus = async (projectId: string) => {
   const response = await requestJson<GenerateTestcasesStatusResponse>(
     `/projects/${projectId}/testcases/generate/async`
   )
+  return response.data
+}
+
+const fetchProjectQuality = async (projectId: string) => {
+  const response = await requestJson<QualityInfoResponse>(`/projects/${projectId}/quality`)
   return response.data
 }
 
@@ -200,6 +212,7 @@ const exportTestcasesExcel = async (projectId: string) => {
 export {
   fetchProjectList,
   fetchProjectDetail,
+  fetchProjectQuality,
   createProject,
   updateProject,
   generateTestcasesAsync,

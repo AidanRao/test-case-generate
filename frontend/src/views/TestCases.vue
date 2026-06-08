@@ -160,13 +160,14 @@ import {
   deleteRequirement,
   deleteTestcase,
   fetchProjectDetail,
+  fetchProjectQuality,
   fetchTestcaseGenerateStatus,
   generateTestcasesAsync,
   updateRequirement,
   updateTestcase,
   createRequirement,
 } from '../api/projects'
-import type { CreateRequirementPayload } from '../api/projects'
+import type { CreateRequirementPayload, QualityInfoResponse } from '../api/projects'
 
 // 重命名为与API类型一致
 interface CreateRequirementForm extends CreateRequirementPayload {}
@@ -200,6 +201,7 @@ type RemoteModuleGroup = ModuleGroup & { requirements: RemoteRequirement[] }
 const remoteModules = ref<RemoteModuleGroup[] | null>(null)
 const remoteProjectTitle = ref<string | null>(null)
 const remoteProjectSource = ref<'local' | 'uniportal' | null>(null)
+const remoteQualityInfo = ref<QualityInfoResponse | null>(null)
 
 const moduleGroups = computed<ModuleGroup[]>(() => remoteModules.value ?? currentProject.value?.modules ?? [])
 const requirements = computed<RequirementWithCases[]>(() => buildRequirements(moduleGroups.value) as RequirementWithCases[])
@@ -581,13 +583,7 @@ const goBack = () => {
 }
 
 
-const baseQualityInfo = ref({
-  fail_count: 0,
-  iterations: 3,
-  duration: 5.2
-})
-
-const qualityInfo = computed(() => {
+const computedReqTypeStats = computed(() => {
   const fixedTypes = [
     '功能测试',
     '可靠性测试',
@@ -601,23 +597,35 @@ const qualityInfo = computed(() => {
     '余量测试'
   ]
   const typeStats = new Map<string, number>(fixedTypes.map((type) => [type, 0]))
-  let successCount = 0
   requirements.value.forEach((item) => {
     const testcases = buildTestcases(item)
-    if (testcases.length > 0) {
-      successCount += 1
-    }
     testcases.forEach((testcase) => {
       const key = testcase.type || '功能测试'
       typeStats.set(key, (typeStats.get(key) ?? 0) + 1)
     })
   })
+  return Object.fromEntries(typeStats)
+})
+
+const fallbackQualityInfo = computed<QualityInfoResponse>(() => {
+  let successCount = 0
+  requirements.value.forEach((item) => {
+    if (buildTestcases(item).length > 0) {
+      successCount += 1
+    }
+  })
   return {
-    ...baseQualityInfo.value,
-    success_count: successCount,
-    req_type_stats: Object.fromEntries(typeStats)
+    fail_count: 0,
+    iterations: hasAnyTestcases.value ? 1 : 0,
+    duration: 0,
+    success_count: successCount
   }
 })
+
+const qualityInfo = computed(() => ({
+  ...(remoteQualityInfo.value ?? fallbackQualityInfo.value),
+  req_type_stats: computedReqTypeStats.value
+}))
 
 const generationStatus = ref<{ status: 'idle' | 'running' | 'done' | 'error'; job_id?: string } | null>(null)
 const statusPollingTimer = ref<number | null>(null)
@@ -798,17 +806,23 @@ const loadRemoteProjectDetail = async () => {
     remoteModules.value = null
     remoteProjectTitle.value = null
     remoteProjectSource.value = null
+    remoteQualityInfo.value = null
     return
   }
   try {
-    const detail = await fetchProjectDetail(remoteId)
+    const [detail, quality] = await Promise.all([
+      fetchProjectDetail(remoteId),
+      fetchProjectQuality(remoteId).catch(() => null)
+    ])
     remoteProjectTitle.value = detail.title
     remoteProjectSource.value = detail.source
     remoteModules.value = mapRemoteModules(detail.requirements ?? [])
+    remoteQualityInfo.value = quality
   } catch {
     remoteModules.value = null
     remoteProjectTitle.value = null
     remoteProjectSource.value = null
+    remoteQualityInfo.value = null
   }
 }
 
