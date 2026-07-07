@@ -1,5 +1,9 @@
 <template>
-  <div v-if="modelValue" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+  <div
+    v-if="modelValue"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+    @click.self="closeDialog"
+  >
     <div class="w-full max-w-3xl rounded-2xl bg-white p-6 shadow-xl">
       <div class="flex items-center justify-between">
         <div>

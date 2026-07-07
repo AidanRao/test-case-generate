@@ -10,6 +10,7 @@ from app.routes.testcases import testcases_bp
 from app.routes.ai_config import ai_config_bp
 from app.routes.system_tasks import system_tasks_bp
 from app.storage.json_storage import JsonStorage
+from app.scheduler import scheduler, register_handler, load_jobs_from_store, start_scheduler
 
 
 def create_app():
@@ -30,11 +31,22 @@ def create_app():
     app.config["STORAGE"] = storage
     app.config["TESTCASE_JOBS"] = {"lock": Lock(), "jobs": {}}
 
+    register_handler("uniportal_sync", storage.synchronize_uniportal)
+
+    load_jobs_from_store(scheduler, storage.system_task_store)
+    start_scheduler()
+
+    app.config["SCHEDULER"] = scheduler
+
     app.register_blueprint(projects_bp, url_prefix="/v1")
     app.register_blueprint(requirements_bp, url_prefix="/v1")
     app.register_blueprint(testcases_bp, url_prefix="/v1")
     app.register_blueprint(quality_bp, url_prefix="/v1")
     app.register_blueprint(ai_config_bp, url_prefix="/v1")
     app.register_blueprint(system_tasks_bp, url_prefix="/v1")
+
+    @app.route("/health", methods=["GET"])
+    def health_check():
+        return {"status": "ok"}, 200
 
     return app

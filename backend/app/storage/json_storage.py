@@ -1,5 +1,5 @@
 import os
-from threading import Event, RLock, Thread
+from copy import deepcopy
 
 from app.storage.base import StorageBackend
 from app.storage.json_io import JsonIO
@@ -30,13 +30,7 @@ class JsonStorage(StorageBackend):
         os.makedirs(self.data_dir, exist_ok=True)
         io = JsonIO(self.data_dir)
         self.io = io
-        self._sync_lock = RLock()
-        self._sync_settings_lock = RLock()
-        self._sync_thread = None
-        self._sync_stop = Event()
-        self._sync_wakeup = Event()
-        self._sync_enabled = False
-        self._sync_interval_seconds = max(5, int(uniportal_sync_interval_seconds))
+        self._sync_lock = None
         self.uniportal_sync_path = os.path.join(self.data_dir, "uniportal_sync.json")
         self.project_store = ProjectStore(io, os.path.join(self.data_dir, "projects.json"))
         self.testcase_store = TestCaseStore(io, os.path.join(self.data_dir, "testcases.json"))
@@ -51,10 +45,11 @@ class JsonStorage(StorageBackend):
             [
                 {
                     "id": self.UNIPORTAL_SYNC_TASK_ID,
+                    "type": "uniportal_sync",
                     "name": "UniPortal 项目同步",
                     "description": "定期从 UniPortal 同步项目和需求数据",
                     "enabled": bool(uniportal_sync_enabled),
-                    "interval_seconds": self._sync_interval_seconds,
+                    "interval_seconds": max(5, int(uniportal_sync_interval_seconds)),
                 }
             ],
         )
@@ -119,204 +114,152 @@ class JsonStorage(StorageBackend):
         if not self.uniportal_source.enabled:
             return
         remote_projects = self.uniportal_source.discover_projects()
-        with self._sync_lock:
-            entries = self._load_sync_entries()
-            source_path = self.uniportal_source.storage_path
-            entries_by_code = {
-                str(item.get("project_code")): item
-                for item in entries
-                if item.get("project_code")
-                and (
-                    not item.get("source_path")
-                    or item.get("source_path") == source_path
-                )
-            }
-            seen_codes = set()
-            updated_entries = []
-            for remote in remote_projects:
-                project_code = str(remote["code"])
-                seen_codes.add(project_code)
-                entry = entries_by_code.get(project_code)
-                local_project = None
-                if entry:
-                    project = self.project_store.get_project(entry.get("project_id"))
-                    local_project = project.to_dict() if project else None
-                if local_project is None:
-                    local_project = self._project_by_code(project_code)
-                if local_project is None:
-                    local_project_id = self.project_store.create_project(
-                        {"code": project_code, "title": remote["title"]}
-                    )
-                    self._log_uniportal_write(
-                        "projects.json",
-                        f"created project_code={project_code} project_id={local_project_id}",
-                    )
-                else:
-                    local_project_id = local_project["id"]
-                    if (
-                        local_project.get("code") != project_code
-                        or local_project.get("title") != remote["title"]
-                    ):
-                        self.project_store.update_project(
-                            local_project_id,
-                            {"code": project_code, "title": remote["title"]},
-                        )
-                        self._log_uniportal_write(
-                            "projects.json",
-                            f"updated project_code={project_code} project_id={local_project_id}",
-                        )
-                requirements = self.uniportal_source.list_requirements(project_code) or []
-                if self.requirement_store.replace_by_project(
-                    local_project_id, requirements
-                ):
-                    self._log_uniportal_write(
-                        "requirements.json",
-                        f"synchronized project_code={project_code} project_id={local_project_id}",
-                    )
-                updated_entries.append(
-                    {
-                        "project_id": str(local_project_id),
-                        "project_code": project_code,
-                        "portal_project_id": remote["portal_project_id"],
-                        "source_path": source_path,
-                    }
-                )
-
-            for entry in entries:
-                project_code = str(entry.get("project_code", ""))
-                entry_source_path = entry.get("source_path")
-                is_current_source = entry_source_path == source_path
-                if (
-                    (is_current_source or not entry_source_path)
-                    and project_code in seen_codes
-                ):
-                    continue
-                if not is_current_source:
-                    updated_entries.append(entry)
-                    continue
-                project_id = entry.get("project_id")
-                if self.project_store.delete_project(project_id):
-                    self._log_uniportal_write(
-                        "projects.json",
-                        f"deleted project_code={project_code} project_id={project_id}",
-                    )
-                if self.requirement_store.delete_by_project(project_id):
-                    self._log_uniportal_write(
-                        "requirements.json",
-                        f"deleted project_code={project_code} project_id={project_id}",
-                    )
-                if self.testcase_store.delete_by_project(project_id):
-                    self._log_uniportal_write(
-                        "testcases.json",
-                        f"deleted project_code={project_code} project_id={project_id}",
-                    )
-                self.quality_store.delete_by_project(project_id)
-            self._save_sync_entries(updated_entries)
-
-    def _task_runtime(self, task):
-        available = self.uniportal_source.enabled
-        with self._sync_settings_lock:
-            running = bool(
-                task.get("enabled")
-                and self._sync_thread
-                and self._sync_thread.is_alive()
+        entries = self._load_sync_entries()
+        source_path = self.uniportal_source.storage_path
+        entries_by_code = {
+            str(item.get("project_code")): item
+            for item in entries
+            if item.get("project_code")
+            and (
+                not item.get("source_path")
+                or item.get("source_path") == source_path
             )
+        }
+        seen_codes = set()
+        updated_entries = []
+        for remote in remote_projects:
+            project_code = str(remote["code"])
+            seen_codes.add(project_code)
+            entry = entries_by_code.get(project_code)
+            local_project = None
+            if entry:
+                project = self.project_store.get_project(entry.get("project_id"))
+                local_project = project.to_dict() if project else None
+            if local_project is None:
+                local_project = self._project_by_code(project_code)
+            if local_project is None:
+                local_project_id = self.project_store.create_project(
+                    {"code": project_code, "title": remote["title"]}
+                )
+                self._log_uniportal_write(
+                    "projects.json",
+                    f"created project_code={project_code} project_id={local_project_id}",
+                )
+            else:
+                local_project_id = local_project["id"]
+                if (
+                    local_project.get("code") != project_code
+                    or local_project.get("title") != remote["title"]
+                ):
+                    self.project_store.update_project(
+                        local_project_id,
+                        {"code": project_code, "title": remote["title"]},
+                    )
+                    self._log_uniportal_write(
+                        "projects.json",
+                        f"updated project_code={project_code} project_id={local_project_id}",
+                    )
+            requirements = self.uniportal_source.list_requirements(project_code) or []
+            if self.requirement_store.replace_by_project(
+                local_project_id, requirements
+            ):
+                self._log_uniportal_write(
+                    "requirements.json",
+                    f"synchronized project_code={project_code} project_id={local_project_id}",
+                )
+            updated_entries.append(
+                {
+                    "project_id": str(local_project_id),
+                    "project_code": project_code,
+                    "portal_project_id": remote["portal_project_id"],
+                    "source_path": source_path,
+                }
+            )
+
+        for entry in entries:
+            project_code = str(entry.get("project_code", ""))
+            entry_source_path = entry.get("source_path")
+            is_current_source = entry_source_path == source_path
+            if (
+                (is_current_source or not entry_source_path)
+                and project_code in seen_codes
+            ):
+                continue
+            if not is_current_source:
+                updated_entries.append(entry)
+                continue
+            project_id = entry.get("project_id")
+            if self.project_store.delete_project(project_id):
+                self._log_uniportal_write(
+                    "projects.json",
+                    f"deleted project_code={project_code} project_id={project_id}",
+                )
+            if self.requirement_store.delete_by_project(project_id):
+                self._log_uniportal_write(
+                    "requirements.json",
+                    f"deleted project_code={project_code} project_id={project_id}",
+                )
+            if self.testcase_store.delete_by_project(project_id):
+                self._log_uniportal_write(
+                    "testcases.json",
+                    f"deleted project_code={project_code} project_id={project_id}",
+                )
+            self.quality_store.delete_by_project(project_id)
+        self._save_sync_entries(updated_entries)
+
+    def _task_runtime(self, task, scheduler=None):
+        available = self.uniportal_source.enabled
+        running = False
+        if scheduler is not None:
+            job = scheduler.get_job(task.get("id"))
+            if job is not None:
+                next_run = getattr(job, 'next_run_time', None)
+                running = bool(next_run is not None)
         return {**task, "available": available, "running": running}
 
-    def list_system_tasks(self):
+    def list_system_tasks(self, scheduler=None):
         return [
-            self._task_runtime(task)
+            self._task_runtime(task, scheduler)
             for task in self.system_task_store.list_tasks()
         ]
 
-    def save_system_task(self, task_id, payload):
+    def save_system_task(self, task_id, payload, scheduler=None):
         task = self.system_task_store.save_task(task_id, payload)
         if task is None:
             return None
-        self._apply_system_task(task)
-        return self._task_runtime(task)
+        if scheduler is not None:
+            from app.scheduler import update_job
+            update_job(scheduler, task)
+        return self._task_runtime(task, scheduler)
 
-    def run_system_task(self, task_id):
+    def run_system_task(self, task_id, scheduler=None):
         task = self.system_task_store.get_task(task_id)
         if task is None or task_id != self.UNIPORTAL_SYNC_TASK_ID:
             return None
         self.synchronize_uniportal()
-        return self._task_runtime(task)
-
-    def start_system_tasks(self):
-        for task in self.system_task_store.list_tasks():
-            self._apply_system_task(task)
-
-    def _apply_system_task(self, task):
-        if task.get("id") != self.UNIPORTAL_SYNC_TASK_ID:
-            return
-        self.configure_uniportal_sync(
-            bool(task.get("enabled")),
-            int(task.get("interval_seconds", 30)),
-        )
-
-    def configure_uniportal_sync(self, enabled, interval_seconds):
-        with self._sync_settings_lock:
-            self._sync_enabled = bool(enabled)
-            self._sync_interval_seconds = max(5, int(interval_seconds))
-            should_start = (
-                self._sync_enabled
-                and (self._sync_thread is None or not self._sync_thread.is_alive())
-            )
-            if should_start:
-                self._sync_stop.clear()
-                self._sync_thread = Thread(
-                    target=self._run_uniportal_sync,
-                    daemon=True,
-                    name="uniportal-sync",
-                )
-                self._sync_thread.start()
-        self._sync_wakeup.set()
-
-    def _run_uniportal_sync(self):
-        while not self._sync_stop.is_set():
-            with self._sync_settings_lock:
-                enabled = self._sync_enabled
-            if enabled:
-                try:
-                    self.synchronize_uniportal()
-                except Exception as exc:
-                    print(f"UniPortal sync failed: {exc}")
-            with self._sync_settings_lock:
-                interval_seconds = self._sync_interval_seconds
-            timeout = interval_seconds if enabled else None
-            self._sync_wakeup.wait(timeout)
-            self._sync_wakeup.clear()
-
-    def stop_system_tasks(self):
-        self._sync_stop.set()
-        self._sync_wakeup.set()
-        if self._sync_thread is not None:
-            self._sync_thread.join(timeout=1)
-        self._sync_thread = None
+        return self._task_runtime(task, scheduler)
 
     def list_projects(self, keyword=None, portal_project_id=None):
-        with self._sync_lock:
-            entries_by_project_id = self._sync_entries_by_project_id()
-            portal_project_ids = {
-                str(item.get("project_id"))
-                for item in entries_by_project_id.values()
-                if item.get("portal_project_id") == portal_project_id
-                and (
-                    not item.get("source_path")
-                    or item.get("source_path") == self.uniportal_source.storage_path
-                )
-            }
-            projects = []
-            for project in self.project_store.list_projects(keyword):
-                source = self._project_source(project.get("id"), entries_by_project_id)
-                if portal_project_id:
-                    if str(project.get("id")) not in portal_project_ids:
-                        continue
-                elif source.name != LOCAL_SOURCE.name:
+        entries_by_project_id = self._sync_entries_by_project_id()
+        portal_project_ids = {
+            str(item.get("project_id"))
+            for item in entries_by_project_id.values()
+            if item.get("portal_project_id") == portal_project_id
+            and (
+                not item.get("source_path")
+                or item.get("source_path") == self.uniportal_source.storage_path
+            )
+        }
+        projects = []
+        for project in self.project_store.list_projects(keyword):
+            source = self._project_source(project.get("id"), entries_by_project_id)
+            if portal_project_id:
+                if str(project.get("id")) not in portal_project_ids:
                     continue
-                projects.append({**project, "source": source.name})
-            return projects
+            elif source.name != LOCAL_SOURCE.name:
+                continue
+            projects.append({**project, "source": source.name})
+        return projects
 
     def get_project_counts(self, project_ids):
         return self.requirement_store.get_project_counts(project_ids)

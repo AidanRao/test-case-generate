@@ -32,31 +32,56 @@ class UniPortalStorageTest(unittest.TestCase):
         project_name=None,
         title="Show wind",
         content="Show valid wind values.",
-        requirement_id=None,
     ):
         item_dir = os.path.join(self.shared.name, portal_project_id, item_id)
-        source_dir = (
-            os.path.join(item_dir, project_name) if project_name else item_dir
+        source_dir = os.path.join(item_dir, project_name or "source")
+        validator_dir = os.path.join(source_dir, "document-validator")
+        os.makedirs(validator_dir, exist_ok=True)
+        self._write_document_validator_file(
+            validator_dir,
+            [
+                {
+                    "id": code,
+                    "title": title,
+                    "type": "功能需求",
+                    "level": 2,
+                    "parent_id": "module",
+                    "is_req": 1,
+                    "content": content,
+                    "tables": [],
+                }
+            ],
         )
-        os.makedirs(source_dir, exist_ok=True)
-        requirement = {
-            "title": title,
-            "type": "Functional",
-            "code": code,
-            "content": content,
-        }
-        if requirement_id:
-            requirement["id"] = requirement_id
-        with open(os.path.join(source_dir, "requirements.json"), "w", encoding="utf-8") as output:
-            json.dump(
-                [
-                    {
-                        "module": "Display",
-                        "requirements": [requirement],
-                    }
-                ],
-                output,
-            )
+
+    def _write_document_validator_file(self, validator_dir, requirements):
+        os.makedirs(validator_dir, exist_ok=True)
+        payload = [
+            {
+                "id": "root",
+                "title": "Root",
+                "level": 0,
+                "parent_id": "root",
+                "is_req": 0,
+                "content": None,
+                "tables": [],
+            },
+            {
+                "id": "module",
+                "title": "Display",
+                "level": 1,
+                "parent_id": "root",
+                "is_req": 0,
+                "content": None,
+                "tables": [],
+            },
+            *requirements,
+        ]
+        with open(
+            os.path.join(validator_dir, "requirement.json"),
+            "w",
+            encoding="utf-8",
+        ) as output:
+            json.dump(payload, output)
 
     def test_no_portal_context_lists_only_local_projects(self):
         storage = JsonStorage(self.local.name, self.shared.name)
@@ -163,7 +188,6 @@ class UniPortalStorageTest(unittest.TestCase):
             self.project_name,
             title="Show updated wind",
             content="Show updated wind values.",
-            requirement_id="incoming-replacement-id",
         )
 
         storage.synchronize_uniportal()
@@ -220,7 +244,8 @@ class UniPortalStorageTest(unittest.TestCase):
                 "portal-001",
                 self.item_id,
                 self.project_name,
-                "requirements.json",
+                "document-validator",
+                "requirement.json",
             )
         )
 
@@ -237,13 +262,28 @@ class UniPortalStorageTest(unittest.TestCase):
         other_source = tempfile.TemporaryDirectory()
         self.addCleanup(other_source.cleanup)
         other_item_id = "item-other-source"
-        item_dir = os.path.join(other_source.name, "portal-other", other_item_id, "other")
-        os.makedirs(item_dir, exist_ok=True)
-        with open(os.path.join(item_dir, "requirements.json"), "w", encoding="utf-8") as output:
-            json.dump(
-                [{"module": "Other", "requirements": [{"code": "REQ-OTHER"}]}],
-                output,
-            )
+        validator_dir = os.path.join(
+            other_source.name,
+            "portal-other",
+            other_item_id,
+            "other",
+            "document-validator",
+        )
+        self._write_document_validator_file(
+            validator_dir,
+            [
+                {
+                    "id": "REQ-OTHER",
+                    "title": "Other",
+                    "type": "功能需求",
+                    "level": 2,
+                    "parent_id": "module",
+                    "is_req": 1,
+                    "content": "Other requirement.",
+                    "tables": [],
+                }
+            ],
+        )
         first_source = JsonStorage(self.local.name, self.shared.name)
         second_source = JsonStorage(self.local.name, other_source.name)
 
@@ -284,16 +324,136 @@ class UniPortalStorageTest(unittest.TestCase):
         self.assertTrue(storage.is_read_only_project(local_id))
         self.assertEqual(storage.list_requirements(local_id)[0]["code"], "REQ-001")
 
-    def test_flat_legacy_item_uses_item_id_as_project_name_fallback(self):
-        legacy_item_id = "item-legacy"
-        self._write_requirements("portal-legacy", legacy_item_id, "REQ-LEGACY")
+    def test_ignores_document_validator_without_project_name_directory(self):
+        item_id = "item-without-project-dir"
+        validator_dir = os.path.join(
+            self.shared.name,
+            "portal-flat",
+            item_id,
+            "document-validator",
+        )
+        self._write_document_validator_file(
+            validator_dir,
+            [
+                {
+                    "id": "REQ-FLAT",
+                    "title": "Flat requirement",
+                    "type": "功能需求",
+                    "level": 2,
+                    "parent_id": "module",
+                    "is_req": 1,
+                    "content": "This file is at the unsupported flat path.",
+                    "tables": [],
+                }
+            ],
+        )
         storage = JsonStorage(self.local.name, self.shared.name)
 
         storage.synchronize_uniportal()
-        project = storage.list_projects(portal_project_id="portal-legacy")[0]
 
-        self.assertEqual(project["code"], legacy_item_id)
-        self.assertEqual(project["title"], legacy_item_id)
+        self.assertEqual(storage.list_projects(portal_project_id="portal-flat"), [])
+
+    def test_syncs_document_validator_requirement_with_json_type_and_parent_module(self):
+        item_id = "item-document-validator"
+        item_dir = os.path.join(self.shared.name, "portal-doc", item_id, "source")
+        validator_dir = os.path.join(item_dir, "document-validator")
+        os.makedirs(validator_dir, exist_ok=True)
+        requirement_path = os.path.join(validator_dir, "requirement.json")
+        with open(requirement_path, "w", encoding="utf-8") as output:
+            json.dump(
+                [
+                    {
+                        "id": "root",
+                        "title": "Root",
+                        "level": 0,
+                        "parent_id": "root",
+                        "is_req": 0,
+                        "content": None,
+                        "tables": [],
+                    },
+                    {
+                        "id": "chapter",
+                        "title": "3 需求",
+                        "level": 2,
+                        "parent_id": "root",
+                        "is_req": 0,
+                        "content": None,
+                        "tables": [],
+                    },
+                    {
+                        "id": "feature-parent",
+                        "title": "3.1 通信模块",
+                        "level": 1,
+                        "parent_id": "chapter",
+                        "is_req": 0,
+                        "content": None,
+                        "tables": [],
+                    },
+                    {
+                        "id": "REQ-DOC-1",
+                        "title": "3.1 通信握手",
+                        "type": "接口需求",
+                        "level": 3,
+                        "parent_id": "feature-parent",
+                        "is_req": 1,
+                        "content": "收到请求帧后发送采样信息。",
+                        "tables": [],
+                    },
+                    {
+                        "id": "REQ-DOC-2",
+                        "title": "3.2 数据打包",
+                        "type": "功能需求",
+                        "level": 3,
+                        "parent_id": "feature-parent",
+                        "is_req": 1,
+                        "content": "将补偿后的角速度编码。",
+                        "tables": [
+                            {
+                                "caption": "打包格式",
+                                "headers": ["字段", "说明"],
+                                "rows": [["status", "状态字"]],
+                            }
+                        ],
+                    },
+                    {
+                        "id": "note",
+                        "title": "4 注释",
+                        "level": 1,
+                        "parent_id": "root",
+                        "is_req": 0,
+                        "content": "非需求节点不导入。",
+                        "tables": [],
+                    },
+                ],
+                output,
+            )
+
+        storage = JsonStorage(self.local.name, self.shared.name)
+
+        storage.synchronize_uniportal()
+        project = storage.list_projects(portal_project_id="portal-doc")[0]
+        requirements = storage.list_requirements(project["id"])
+
+        self.assertEqual(project["title"], "source")
+        self.assertEqual(
+            [item["code"] for item in requirements],
+            ["REQ-DOC-1", "REQ-DOC-2"],
+        )
+        self.assertEqual(
+            [item["title"] for item in requirements],
+            ["3.1 通信握手", "3.2 数据打包"],
+        )
+        self.assertEqual(
+            [item["module"] for item in requirements],
+            ["3.1 通信模块", "3.1 通信模块"],
+        )
+        self.assertEqual(requirements[0]["type"], "接口需求")
+        self.assertEqual(requirements[1]["type"], "功能需求")
+        self.assertIn("收到请求帧后发送采样信息。", requirements[0]["content"])
+        self.assertIn("打包格式", requirements[1]["content"])
+        self.assertIn("| 字段 | 说明 |", requirements[1]["content"])
+        self.assertIn("| --- | --- |", requirements[1]["content"])
+        self.assertIn("| status | 状态字 |", requirements[1]["content"])
 
     def test_api_rejects_writes_to_uniportal_requirements(self):
         with patch.dict(

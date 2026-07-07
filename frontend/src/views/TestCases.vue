@@ -78,7 +78,7 @@
         :data="graphData"
         @open-requirement="openRequirementFromBoard"
         @open-testcase="openTestcaseDetail"
-        @create-requirement="handleCreateRequirement"
+        @open-module="openModuleRequirements"
       />
       <div class="absolute left-5 top-5 flex gap-2">
         <button
@@ -130,12 +130,6 @@
     @cancel="handleCancel"
   />
 
-  <!-- 新增需求弹窗 -->
-  <CreateRequirementDialog
-    v-model="createRequirementVisible"
-    :default-module="selectedModule"
-    @create="handleRequirementCreate"
-  />
 </template>
 
 <script setup lang="ts">
@@ -148,7 +142,6 @@ import type { BoardNode } from '../components/TestCaseBoard.vue'
 import RequirementList from '../components/RequirementList.vue'
 import RequirementDetailDialog from '../components/RequirementDetailDialog.vue'
 import type { RequirementDetailItem, RequirementTestCaseItem } from '../components/RequirementDetailDialog.vue'
-import CreateRequirementDialog from '../components/CreateRequirementDialog.vue'
 import QualityInfoCard from '../components/QualityInfoCard.vue'
 import TestCaseDetailDialog from '../components/TestCaseDetailDialog.vue'
 import type { TestCaseDetailItem } from '../components/TestCaseDetailDialog.vue'
@@ -165,12 +158,8 @@ import {
   generateTestcasesAsync,
   updateRequirement,
   updateTestcase,
-  createRequirement,
 } from '../api/projects'
-import type { CreateRequirementPayload, QualityInfoResponse } from '../api/projects'
-
-// 重命名为与API类型一致
-interface CreateRequirementForm extends CreateRequirementPayload {}
+import type { QualityInfoResponse } from '../api/projects'
 
 
 const router = useRouter()
@@ -297,9 +286,6 @@ const detailRequirementGenerating = ref(false)
 const testcaseDetail = ref<TestCaseDetailItem | null>(null)
 const testcaseDetailVisible = ref(false)
 
-// 新增需求相关
-const createRequirementVisible = ref(false)
-const selectedModule = ref('')
 const {
   confirmVisible,
   confirmTitle,
@@ -354,6 +340,21 @@ const openRequirementFromCoverage = (requirement: RequirementWithCases) => {
 const openTestcaseDetail = (item: TestCaseDetailItem) => {
   testcaseDetail.value = item
   testcaseDetailVisible.value = true
+}
+
+const openModuleRequirements = (module: string) => {
+  if (!module) {
+    return
+  }
+  const targetRoute = router.resolve({
+    name: 'module-requirements',
+    params: {
+      projectId: projectId.value,
+      moduleName: module
+    },
+    query: route.query
+  })
+  window.open(targetRoute.href, '_blank', 'noopener,noreferrer')
 }
 
 const handleRequirementSave = async (payload: RequirementDetailItem) => {
@@ -424,50 +425,6 @@ const handleRequirementDelete = async (payload: RequirementDetailItem) => {
       }
     }
   })
-}
-
-// 处理新增需求菜单项点击
-const handleCreateRequirement = (module: string) => {
-  if (isReadOnlyProject.value) {
-    return
-  }
-  selectedModule.value = module
-  createRequirementVisible.value = true
-}
-
-// 处理新增需求表单提交
-const handleRequirementCreate = async (payload: CreateRequirementForm) => {
-  if (isReadOnlyProject.value) {
-    return
-  }
-  if (!isRemoteProject.value) {
-    window.alert('本地项目暂不支持新增需求')
-    return
-  }
-  try {
-    const result = await createRequirement(projectId.value, payload)
-    await loadRemoteProjectDetail()
-    createRequirementVisible.value = false
-    
-    // 打开生成测试用例确认弹窗
-    openConfirm({
-      title: '生成测试用例',
-      message: '是否为新需求生成测试用例？',
-      confirmText: '生成',
-      onConfirm: async () => {
-        try {
-          const requirementId = result.id || result.code
-          await generateTestcasesAsync(projectId.value, [requirementId])
-          await loadRemoteProjectDetail()
-          refreshGenerationStatus()
-        } catch {
-          window.alert('测试用例生成任务提交失败，请稍后重试')
-        }
-      }
-    })
-  } catch {
-    window.alert('需求创建失败，请稍后重试')
-  }
 }
 
 const handleRequirementGenerateTestcases = async () => {

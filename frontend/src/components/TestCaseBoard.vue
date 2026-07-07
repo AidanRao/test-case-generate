@@ -43,7 +43,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (event: 'open-requirement', requirement: Requirement): void
   (event: 'open-testcase', testcase: TestCaseDetailItem): void
-  (event: 'create-requirement', module: string): void
+  (event: 'open-module', module: string): void
 }>()
 
 const containerRef = ref<HTMLDivElement | null>(null)
@@ -74,27 +74,37 @@ const getLabelLimit = (type: BoardNode['type']) => {
 
 const getNodeAttrs = (type: BoardNode['type'], label: string) => {
   const displayLabel = truncateLabel(label, getLabelLimit(type))
+  const labelBaseAttrs = {
+    text: displayLabel,
+    textAnchor: 'middle',
+    textVerticalAnchor: 'middle',
+    textWrap: {
+      width: -24,
+      height: -8,
+      ellipsis: true
+    }
+  }
   if (type === 'root') {
     return {
       body: { fill: '#0ea5e9', stroke: '#0284c7', rx: 6, ry: 6 },
-      label: { text: displayLabel, fill: '#fff', fontSize: 24, fontWeight: 'bold' }
+      label: { ...labelBaseAttrs, fill: '#fff', fontSize: 30, fontWeight: 'bold' }
     }
   }
   if (type === 'feature') {
     return {
       body: { fill: '#10b981', stroke: '#059669', rx: 6, ry: 6 },
-      label: { text: displayLabel, fill: '#fff', fontSize: 22, fontWeight: 'bold' }
+      label: { ...labelBaseAttrs, fill: '#fff', fontSize: 28, fontWeight: 'bold' }
     }
   }
   if (type === 'subfeature') {
     return {
       body: { fill: '#f59e0b', stroke: '#d97706', rx: 6, ry: 6 },
-      label: { text: displayLabel, fill: '#fff', fontSize: 20, fontWeight: 'bold' }
+      label: { ...labelBaseAttrs, fill: '#fff', fontSize: 27, fontWeight: 'bold' }
     }
   }
   return {
     body: { fill: '#f8fafc', stroke: '#e2e8f0', rx: 6, ry: 6 },
-    label: { text: displayLabel, fill: '#475569', fontSize: 18, fontWeight: 500 }
+    label: { ...labelBaseAttrs, fill: '#475569', fontSize: 22, fontWeight: 600 }
   }
 }
 
@@ -232,8 +242,7 @@ const initGraph = () => {
       return
     }
     if (data?.type === 'feature') {
-      // 点击一级需求（模块）时，触发新增需求事件
-      emit('create-requirement', data.label || '')
+      emit('open-module', data.label || '')
     }
   })
 }

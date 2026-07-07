@@ -43,7 +43,9 @@ class SystemTaskStore:
             updated = {
                 **task,
                 "enabled": bool(payload.get("enabled")),
-                "interval_seconds": int(payload.get("interval_seconds")),
+                "interval_seconds": int(
+                    payload.get("interval_seconds", task.get("interval_seconds", 30))
+                ),
             }
             tasks[index] = updated
             self.io.save(self.file_path, {"tasks": tasks})

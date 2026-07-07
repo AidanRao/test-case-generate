@@ -4,10 +4,10 @@ services:
     image: test-case-generate
     container_name: test-case-generate
     ports:
-      - "8010:80"
+      - "8005:80"
     volumes:
       # UniPortal uploads are read only; requirements.json is read from this volume.
-      - uniportal_storage:/data/uniportal:ro
+      - uniportal_storage:/data/uniportal
       # Keep using the existing local store for projects and generated test cases.
       - ./backend/data:/app/data
       - ./backend/config.json:/app/config.json:ro

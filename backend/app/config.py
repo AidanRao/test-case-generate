@@ -7,7 +7,7 @@ class AppConfig:
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.base_dir = base_dir
         self.data_dir = os.environ.get("DATA_DIR", os.path.join(base_dir, "data"))
-        self.uniportal_storage_path = os.environ.get("UNIPORTAL_STORAGE_PATH")
+        self.uniportal_storage_path = os.environ.get("UNIPORTAL_STORAGE_PATH", "uniportal")
         self.uniportal_sync_enabled = (
             os.environ.get("UNIPORTAL_SYNC_ENABLED", "true").strip().lower()
             not in {"0", "false", "no", "off"}
