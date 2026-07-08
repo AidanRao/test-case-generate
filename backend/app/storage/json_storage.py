@@ -32,26 +32,23 @@ class JsonStorage(StorageBackend):
         self.io = io
         self._sync_lock = None
         self.uniportal_sync_path = os.path.join(self.data_dir, "uniportal_sync.json")
-        self.project_store = ProjectStore(io, os.path.join(self.data_dir, "projects.json"))
-        self.testcase_store = TestCaseStore(io, os.path.join(self.data_dir, "testcases.json"))
-        self.quality_store = QualityStore(io, os.path.join(self.data_dir, "quality.json"))
+        self.project_store = ProjectStore(
+            io, os.path.join(self.data_dir, "projects.json")
+        )
+        self.testcase_store = TestCaseStore(
+            io, os.path.join(self.data_dir, "testcases.json")
+        )
+        self.quality_store = QualityStore(
+            io, os.path.join(self.data_dir, "quality.json")
+        )
         self.requirement_store = RequirementStore(
             io, os.path.join(self.data_dir, "requirements.json"), self.project_store
         )
-        self.ai_config_store = AIConfigStore(io, os.path.join(self.data_dir, "ai_config.json"))
+        self.ai_config_store = AIConfigStore(
+            io, os.path.join(self.data_dir, "ai_config.json")
+        )
         self.system_task_store = SystemTaskStore(
-            io,
-            os.path.join(self.data_dir, "system_tasks.json"),
-            [
-                {
-                    "id": self.UNIPORTAL_SYNC_TASK_ID,
-                    "type": "uniportal_sync",
-                    "name": "UniPortal 项目同步",
-                    "description": "定期从 UniPortal 同步项目和需求数据",
-                    "enabled": bool(uniportal_sync_enabled),
-                    "interval_seconds": max(5, int(uniportal_sync_interval_seconds)),
-                }
-            ],
+            io, os.path.join(self.data_dir, "system_tasks.json")
         )
         self.uniportal_source = UniPortalRequirementSource(uniportal_storage_path)
 

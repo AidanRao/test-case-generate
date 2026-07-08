@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from app.storage.json_storage import JsonStorage
-from app.scheduler import scheduler, register_handler, shutdown_scheduler, start_scheduler
+from app.scheduler import scheduler, shutdown_scheduler, start_scheduler
 
 
 class SystemTasksTest(unittest.TestCase):
@@ -21,7 +21,16 @@ class SystemTasksTest(unittest.TestCase):
 
     def test_task_config_is_persisted_and_can_start_sync_runner(self):
         storage = JsonStorage(self.local.name, self.shared.name, False, 30)
-        register_handler("uniportal_sync", storage.synchronize_uniportal)
+        from app.scheduler import sync_default_jobs
+
+        sync_default_jobs(
+            scheduler,
+            storage.system_task_store,
+            runtime_kwargs={"uniportal_sync": {"storage": storage}},
+            default_overrides={
+                "uniportal_sync": {"enabled": False, "interval_seconds": 30}
+            },
+        )
         start_scheduler()
 
         initial = storage.list_system_tasks(scheduler)[0]
@@ -90,7 +99,16 @@ class SystemTasksTest(unittest.TestCase):
 
     def test_running_task_stays_scheduled_after_manual_run(self):
         storage = JsonStorage(self.local.name, self.shared.name, True, 30)
-        register_handler("uniportal_sync", storage.synchronize_uniportal)
+        from app.scheduler import sync_default_jobs
+
+        sync_default_jobs(
+            scheduler,
+            storage.system_task_store,
+            runtime_kwargs={"uniportal_sync": {"storage": storage}},
+            default_overrides={
+                "uniportal_sync": {"enabled": True, "interval_seconds": 30}
+            },
+        )
         storage.save_system_task(
             "uniportal_sync", {"enabled": True, "interval_seconds": 15}, scheduler
         )
@@ -128,6 +146,67 @@ class SystemTasksTest(unittest.TestCase):
 
             missing = client.post("/v1/system/tasks/missing/run")
             self.assertEqual(missing.status_code, 404)
+
+    def test_scheduled_task_decorator_registers_metadata(self):
+        from app.task_registry import TASK_REGISTRY, scheduled_task
+
+        before_count = len(TASK_REGISTRY)
+
+        @scheduled_task(
+            id="test_registry_task",
+            name="测试任务",
+            description="用于测试注册表",
+            kwargs={"value": 1},
+            seconds=10,
+        )
+        def sample_task(value=None):
+            return value
+
+        self.addCleanup(lambda: TASK_REGISTRY.pop())
+        self.assertEqual(len(TASK_REGISTRY), before_count + 1)
+        task = TASK_REGISTRY[-1]
+        self.assertEqual(task.id, "test_registry_task")
+        self.assertIs(task.func, sample_task)
+        self.assertEqual(task.interval_seconds, 10)
+        self.assertEqual(task.kwargs, {"value": 1})
+
+    def test_registry_sync_adds_missing_task_and_preserves_existing_config(self):
+        from app.scheduler import sync_default_jobs
+
+        with open(os.path.join(self.local.name, "system_tasks.json"), "w", encoding="utf-8") as target:
+            json.dump(
+                {
+                    "tasks": [
+                        {
+                            "id": "uniportal_sync",
+                            "type": "uniportal_sync",
+                            "name": "UniPortal 项目同步",
+                            "description": "定期从 UniPortal 同步项目和需求数据",
+                            "enabled": True,
+                            "interval_seconds": 42,
+                        }
+                    ]
+                },
+                target,
+            )
+        storage = JsonStorage(self.local.name, self.shared.name, False, 30)
+
+        sync_default_jobs(
+            scheduler,
+            storage.system_task_store,
+            runtime_kwargs={"uniportal_sync": {"storage": storage}},
+            default_overrides={
+                "uniportal_sync": {"enabled": False, "interval_seconds": 30}
+            },
+        )
+        start_scheduler()
+
+        stored = storage.system_task_store.get_task("uniportal_sync")
+        self.assertTrue(stored["enabled"])
+        self.assertEqual(stored["interval_seconds"], 42)
+        job = scheduler.get_job("uniportal_sync")
+        self.assertIsNotNone(job)
+        self.assertEqual(job.trigger.interval.total_seconds(), 42)
 
 
 if __name__ == "__main__":

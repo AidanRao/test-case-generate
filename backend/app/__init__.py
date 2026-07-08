@@ -10,7 +10,7 @@ from app.routes.testcases import testcases_bp
 from app.routes.ai_config import ai_config_bp
 from app.routes.system_tasks import system_tasks_bp
 from app.storage.json_storage import JsonStorage
-from app.scheduler import scheduler, register_handler, load_jobs_from_store, start_scheduler
+from app.scheduler import scheduler, sync_default_jobs, start_scheduler
 
 
 def create_app():
@@ -31,9 +31,17 @@ def create_app():
     app.config["STORAGE"] = storage
     app.config["TESTCASE_JOBS"] = {"lock": Lock(), "jobs": {}}
 
-    register_handler("uniportal_sync", storage.synchronize_uniportal)
-
-    load_jobs_from_store(scheduler, storage.system_task_store)
+    sync_default_jobs(
+        scheduler,
+        storage.system_task_store,
+        runtime_kwargs={"uniportal_sync": {"storage": storage}},
+        default_overrides={
+            "uniportal_sync": {
+                "enabled": app_config.uniportal_sync_enabled,
+                "interval_seconds": app_config.uniportal_sync_interval_seconds,
+            }
+        },
+    )
     start_scheduler()
 
     app.config["SCHEDULER"] = scheduler

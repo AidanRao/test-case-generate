@@ -1,41 +1,60 @@
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.jobstores.base import ConflictingIdError
 
-TASK_HANDLERS = {}
+from app.task_registry import TASK_REGISTRY
 
 scheduler = BackgroundScheduler(timezone="Asia/Shanghai")
+RUNTIME_KWARGS = {}
 
 
-def register_handler(task_type, func):
-    TASK_HANDLERS[task_type] = func
+def sync_default_jobs(
+    scheduler_instance,
+    task_store,
+    runtime_kwargs=None,
+    default_overrides=None,
+):
+    import app.tasks  # noqa: F401
+
+    global RUNTIME_KWARGS
+    RUNTIME_KWARGS = runtime_kwargs or {}
+    task_store.sync_registered_tasks(TASK_REGISTRY, default_overrides)
+    load_jobs_from_store(scheduler_instance, task_store, RUNTIME_KWARGS)
 
 
-def load_jobs_from_store(scheduler_instance, task_store):
+def load_jobs_from_store(scheduler_instance, task_store, runtime_kwargs=None):
+    runtime_kwargs = runtime_kwargs or {}
     tasks = task_store.list_tasks()
     for task in tasks:
-        if task["type"] not in TASK_HANDLERS:
+        registered_task = _registered_task(task["id"])
+        if registered_task is None:
+            continue
+        if scheduler_instance.get_job(task["id"]) is not None:
             continue
 
-        job = _add_interval_job(scheduler_instance, task)
+        try:
+            job = _add_job(scheduler_instance, registered_task, task, runtime_kwargs)
+        except ConflictingIdError:
+            continue
         if not task.get("enabled", True):
             job.pause()
 
 
 def update_job(scheduler_instance, task):
     task_id = task["id"]
-    task_type = task["type"]
     enabled = task.get("enabled", True)
+    registered_task = _registered_task(task_id)
 
-    if task_type not in TASK_HANDLERS:
+    if registered_task is None:
         return False
 
     job = scheduler_instance.get_job(task_id)
 
     if job is None:
-        job = _add_interval_job(scheduler_instance, task)
+        job = _add_job(scheduler_instance, registered_task, task, RUNTIME_KWARGS)
         if not enabled:
             job.pause()
     else:
-        job.reschedule(trigger="interval", seconds=task["interval_seconds"])
+        job.reschedule(**_job_trigger(registered_task, task))
         if enabled:
             job.resume()
         else:
@@ -43,14 +62,32 @@ def update_job(scheduler_instance, task):
     return True
 
 
-def _add_interval_job(scheduler_instance, task):
+def _registered_task(task_id):
+    return next((task for task in TASK_REGISTRY if task.id == task_id), None)
+
+
+def _add_job(scheduler_instance, registered_task, stored_task, runtime_kwargs=None):
+    runtime_kwargs = runtime_kwargs or {}
+    kwargs = {
+        **registered_task.kwargs,
+        **runtime_kwargs.get(registered_task.id, {}),
+    }
     return scheduler_instance.add_job(
-        TASK_HANDLERS[task["type"]],
-        trigger="interval",
-        seconds=task["interval_seconds"],
-        id=task["id"],
-        replace_existing=True,
+        registered_task.func,
+        id=registered_task.id,
+        replace_existing=False,
+        kwargs=kwargs,
+        **_job_trigger(registered_task, stored_task),
     )
+
+
+def _job_trigger(registered_task, stored_task):
+    return {
+        "trigger": "interval",
+        "seconds": stored_task.get(
+            "interval_seconds", registered_task.interval_seconds
+        ),
+    }
 
 
 def start_scheduler():
