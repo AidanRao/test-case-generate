@@ -4,7 +4,10 @@ import os
 from app.models.requirement import Requirement
 
 
-DOCUMENT_VALIDATOR_REQUIREMENT_FILENAME = "requirement.json"
+PROJECT_NAME_EXCLUDED_DIRECTORIES = {
+    "configuration-test-case-generate",
+    "document-validator",
+}
 
 
 class DocumentValidatorRequirementAdapter:
@@ -120,21 +123,13 @@ class UniPortalRequirementSource:
 
     def _project_name(self, item_id, item_path):
         source_roots = self._visible_directories(item_path)
-        source_roots = [name for name in source_roots if name != "document-validator"]
-        return source_roots[0] if source_roots else item_id
+        source_roots = [
+            name for name in source_roots if name not in PROJECT_NAME_EXCLUDED_DIRECTORIES
+        ]
+        return source_roots[0] if source_roots else None
 
-    def _find_requirement_file(self, item_path):
-        source_roots = self._visible_directories(item_path)
-        source_roots = [name for name in source_roots if name != "document-validator"]
-        if not source_roots:
-            return None
-        source_root = source_roots[0]
-        path = os.path.join(
-            item_path,
-            source_root,
-            "document-validator",
-            DOCUMENT_VALIDATOR_REQUIREMENT_FILENAME,
-        )
+    def _find_requirement_file(self, item_path, requirement_path):
+        path = os.path.join(item_path, requirement_path)
         return path if os.path.isfile(path) else None
 
     def _normalize_requirements(self, project_id, file_path):
@@ -149,21 +144,27 @@ class UniPortalRequirementSource:
     def _build_project(self, portal_project_id, item_id, item_path):
         project_code = item_id
         project_name = self._project_name(item_id, item_path)
+        if not project_name:
+            return None
         return {
             "code": project_code,
             "title": project_name,
             "portal_project_id": portal_project_id,
         }
 
-    def discover_projects(self):
+    def discover_projects(self, requirement_path):
         projects = []
         for current_project_id, item_id, item_path in self._iter_items() or []:
-            if not self._find_requirement_file(item_path):
+            if not self._find_requirement_file(item_path, requirement_path):
                 continue
-            projects.append(self._build_project(current_project_id, item_id, item_path))
+            project = self._build_project(current_project_id, item_id, item_path)
+            if project:
+                projects.append(project)
         return projects
 
-    def list_requirements(self, project_code, module=None, req_type=None, keyword=None):
+    def list_requirements(
+        self, project_code, requirement_path, module=None, req_type=None, keyword=None
+    ):
         item_path = None
         for _, item_id, path in self._iter_items() or []:
             if str(item_id) == str(project_code):
@@ -172,7 +173,7 @@ class UniPortalRequirementSource:
         if item_path is None:
             return None
 
-        file_path = self._find_requirement_file(item_path)
+        file_path = self._find_requirement_file(item_path, requirement_path)
         if not file_path:
             return None
         items = self._normalize_requirements(str(project_code), file_path)

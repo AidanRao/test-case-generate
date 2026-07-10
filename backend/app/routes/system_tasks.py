@@ -20,7 +20,7 @@ def update_system_task(task_id):
     if err == "not_found":
         return error(40401, "定时任务不存在", 404)
     if err:
-        return error(40001, "启用状态或执行间隔不合法", 400)
+        return error(40001, "定时任务配置不合法", 400)
     return ok(task)
 
 

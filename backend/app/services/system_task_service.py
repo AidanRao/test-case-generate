@@ -22,9 +22,13 @@ class SystemTaskService:
             return None, "invalid_interval"
         if not self.MIN_INTERVAL_SECONDS <= interval_seconds <= self.MAX_INTERVAL_SECONDS:
             return None, "invalid_interval"
+        kwargs = payload.get("kwargs", {})
+        if not isinstance(kwargs, dict):
+            return None, "invalid_kwargs"
         update_payload = {
             "enabled": enabled,
             "interval_seconds": interval_seconds,
+            "kwargs": kwargs,
         }
         task = self.storage.save_system_task(
             task_id,

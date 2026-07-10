@@ -55,6 +55,7 @@ def update_job(scheduler_instance, task):
             job.pause()
     else:
         job.reschedule(**_job_trigger(registered_task, task))
+        job.modify(kwargs=_task_kwargs(registered_task, task, RUNTIME_KWARGS))
         if enabled:
             job.resume()
         else:
@@ -63,22 +64,39 @@ def update_job(scheduler_instance, task):
 
 
 def _registered_task(task_id):
+    import app.tasks  # noqa: F401
+
     return next((task for task in TASK_REGISTRY if task.id == task_id), None)
+
+
+def execute_task(task_id, stored_task, runtime_kwargs=None):
+    registered_task = _registered_task(task_id)
+    if registered_task is None:
+        return False
+    registered_task.func(
+        **_task_kwargs(registered_task, stored_task, runtime_kwargs or {})
+    )
+    return True
 
 
 def _add_job(scheduler_instance, registered_task, stored_task, runtime_kwargs=None):
     runtime_kwargs = runtime_kwargs or {}
-    kwargs = {
-        **registered_task.kwargs,
-        **runtime_kwargs.get(registered_task.id, {}),
-    }
     return scheduler_instance.add_job(
         registered_task.func,
         id=registered_task.id,
         replace_existing=False,
-        kwargs=kwargs,
+        kwargs=_task_kwargs(registered_task, stored_task, runtime_kwargs),
         **_job_trigger(registered_task, stored_task),
     )
+
+
+def _task_kwargs(registered_task, stored_task, runtime_kwargs=None):
+    runtime_kwargs = runtime_kwargs or {}
+    return {
+        **registered_task.kwargs,
+        **stored_task.get("kwargs", {}),
+        **runtime_kwargs.get(registered_task.id, {}),
+    }
 
 
 def _job_trigger(registered_task, stored_task):

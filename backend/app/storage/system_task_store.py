@@ -19,12 +19,16 @@ class SystemTaskStore:
         tasks = self.list_tasks()
         known_ids = {item["id"] for item in tasks}
         changed = False
+        tasks_by_id = {item["id"]: item for item in tasks}
         for registered_task in registered_tasks:
+            override = overrides.get(registered_task.id)
             if registered_task.id in known_ids:
+                task = tasks_by_id[registered_task.id]
+                if "kwargs" not in task:
+                    task["kwargs"] = registered_task.to_store_record(override)["kwargs"]
+                    changed = True
                 continue
-            tasks.append(
-                registered_task.to_store_record(overrides.get(registered_task.id))
-            )
+            tasks.append(registered_task.to_store_record(override))
             known_ids.add(registered_task.id)
             changed = True
         if changed:
@@ -47,6 +51,7 @@ class SystemTaskStore:
                 "interval_seconds": int(
                     payload.get("interval_seconds", task.get("interval_seconds", 30))
                 ),
+                "kwargs": payload.get("kwargs", task.get("kwargs", {})),
             }
             tasks[index] = updated
             self.io.save(self.file_path, tasks)

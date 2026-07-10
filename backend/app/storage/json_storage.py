@@ -107,10 +107,10 @@ class JsonStorage(StorageBackend):
                 return project
         return None
 
-    def synchronize_uniportal(self):
+    def synchronize_uniportal(self, requirement_path):
         if not self.uniportal_source.enabled:
             return
-        remote_projects = self.uniportal_source.discover_projects()
+        remote_projects = self.uniportal_source.discover_projects(requirement_path)
         entries = self._load_sync_entries()
         source_path = self.uniportal_source.storage_path
         entries_by_code = {
@@ -156,7 +156,10 @@ class JsonStorage(StorageBackend):
                         "projects.json",
                         f"updated project_code={project_code} project_id={local_project_id}",
                     )
-            requirements = self.uniportal_source.list_requirements(project_code) or []
+            requirements = (
+                self.uniportal_source.list_requirements(project_code, requirement_path)
+                or []
+            )
             if self.requirement_store.replace_by_project(
                 local_project_id, requirements
             ):
@@ -233,7 +236,10 @@ class JsonStorage(StorageBackend):
         task = self.system_task_store.get_task(task_id)
         if task is None or task_id != self.UNIPORTAL_SYNC_TASK_ID:
             return None
-        self.synchronize_uniportal()
+        from app.scheduler import execute_task
+
+        if not execute_task(task_id, task, {task_id: {"storage": self}}):
+            return None
         return self._task_runtime(task, scheduler)
 
     def list_projects(self, keyword=None, portal_project_id=None):

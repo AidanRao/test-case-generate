@@ -22,6 +22,7 @@ class ScheduledTask:
             "interval_seconds": int(
                 overrides.get("interval_seconds", self.interval_seconds)
             ),
+            "kwargs": overrides.get("kwargs", self.kwargs),
         }
 
 

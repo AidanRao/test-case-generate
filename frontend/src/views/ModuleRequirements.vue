@@ -9,23 +9,16 @@
         >
           <el-icon><ArrowLeft /></el-icon>
         </button>
-        <div class="min-w-0">
+        <div ref="moduleSelectContainer" class="min-w-0" style="width: min(22rem, 100%);">
           <p class="text-xs font-medium text-sky-600">{{ projectName }}</p>
-          <div class="module-select mt-1 max-w-full">
-            <el-select
-              :model-value="moduleName"
-              size="large"
-              class="w-full min-w-56 max-w-full"
-              popper-class="module-select-popper"
-              @change="handleModuleChange"
-            >
-              <el-option
-                v-for="module in moduleOptions"
-                :key="module"
-                :label="module"
-                :value="module"
-              />
-            </el-select>
+          <div class="module-select mt-1" @click.stop="toggleModuleDropdown">
+            <div class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 shadow-sm">
+              <span class="min-w-0 flex-1 truncate text-lg font-semibold text-slate-800">{{ moduleName }}</span>
+              <div class="flex flex-col items-center gap-0.5 text-slate-400">
+                <el-icon class="text-xs"><ArrowUp /></el-icon>
+                <el-icon class="text-xs"><ArrowDown /></el-icon>
+              </div>
+            </div>
           </div>
         </div>
         <div class="ml-auto flex flex-wrap items-center gap-2">
@@ -195,13 +188,82 @@
       @confirm="handleConfirm"
       @cancel="handleCancel"
     />
+
+    <Teleport to="body">
+      <div
+        v-if="moduleDropdownVisible"
+        class="fixed inset-0 z-50"
+        @click="closeModuleDropdown"
+      >
+        <div class="absolute inset-0 bg-black/20"></div>
+        <div
+          class="absolute rounded-xl border border-slate-200 bg-white shadow-xl z-50"
+          :style="{
+            top: dropdownPosition.top + 'px',
+            left: dropdownPosition.left + 'px',
+            width: Math.min(dropdownPosition.width, 560) + 'px'
+          }"
+        >
+          <div class="flex items-center border-b border-slate-100 px-4 py-3">
+            <div class="relative flex-1">
+              <el-icon class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400">
+                <Search />
+              </el-icon>
+              <input
+                ref="moduleSearchInput"
+                v-model="moduleSearchQuery"
+                type="text"
+                placeholder="Find Module..."
+                class="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-10 pr-3 text-sm text-slate-700 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+                @keydown.esc="closeModuleDropdown"
+              />
+            </div>
+            <button
+              class="ml-2 rounded-lg px-2 py-1 text-xs font-medium text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+              type="button"
+              @click.stop="closeModuleDropdown"
+            >
+              Esc
+            </button>
+          </div>
+          <div class="max-h-64 overflow-y-auto">
+            <button
+              v-for="module in filteredModuleOptions"
+              :key="module"
+              class="flex w-full items-center justify-between px-4 py-3 text-left transition hover:bg-slate-50"
+              :class="module === moduleName ? 'bg-slate-50' : ''"
+              type="button"
+              @click.stop="selectModule(module)"
+            >
+              <span class="flex-1 text-sm font-medium text-slate-700">{{ module }}</span>
+              <el-icon v-if="module === moduleName" class="h-4 w-4 text-sky-600">
+                <Check />
+              </el-icon>
+            </button>
+            <div v-if="filteredModuleOptions.length === 0" class="px-4 py-8 text-center text-sm text-slate-400">
+              未找到匹配的模块
+            </div>
+          </div>
+          <div class="border-t border-slate-100 px-4 py-3">
+            <button
+              class="flex w-full items-center gap-2 rounded-lg border border-dashed border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-500 transition hover:border-slate-300 hover:bg-slate-50"
+              type="button"
+              @click.stop="openCreateModule"
+            >
+              <el-icon class="h-4 w-4"><Plus /></el-icon>
+              新增模块
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, Plus } from '@element-plus/icons-vue'
+import { ArrowLeft, ArrowUp, ArrowDown, Plus, Search, Check } from '@element-plus/icons-vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import CreateRequirementDialog from '../components/CreateRequirementDialog.vue'
 import PaginationBar from '../components/PaginationBar.vue'
@@ -261,6 +323,11 @@ const testcaseDetail = ref<TestCaseDetailItem | null>(null)
 const testcaseDetailVisible = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(5)
+const moduleDropdownVisible = ref(false)
+const moduleSearchQuery = ref('')
+const moduleSearchInput = ref<HTMLInputElement | null>(null)
+const moduleSelectContainer = ref<HTMLElement | null>(null)
+const dropdownPosition = ref({ top: 0, left: 0, width: 0 })
 
 const {
   confirmVisible,
@@ -286,6 +353,14 @@ const moduleOptions = computed(() => {
   return moduleName.value && !options.includes(moduleName.value)
     ? [moduleName.value, ...options]
     : options
+})
+
+const filteredModuleOptions = computed(() => {
+  if (!moduleSearchQuery.value) {
+    return moduleOptions.value
+  }
+  const query = moduleSearchQuery.value.toLowerCase()
+  return moduleOptions.value.filter((module) => module.toLowerCase().includes(query))
 })
 
 const selectedModuleGroup = computed(() =>
@@ -425,8 +500,31 @@ const openCreateDialog = () => {
   createRequirementVisible.value = true
 }
 
-const handleModuleChange = (nextModuleName: string) => {
+const toggleModuleDropdown = () => {
+  moduleDropdownVisible.value = !moduleDropdownVisible.value
+  if (moduleDropdownVisible.value) {
+    if (moduleSelectContainer.value) {
+      const rect = moduleSelectContainer.value.getBoundingClientRect()
+      dropdownPosition.value = {
+        top: rect.bottom + 8,
+        left: rect.left,
+        width: rect.width
+      }
+    }
+    setTimeout(() => {
+      moduleSearchInput.value?.focus()
+    }, 100)
+  }
+}
+
+const closeModuleDropdown = () => {
+  moduleDropdownVisible.value = false
+  moduleSearchQuery.value = ''
+}
+
+const selectModule = (nextModuleName: string) => {
   if (!nextModuleName || nextModuleName === moduleName.value) {
+    closeModuleDropdown()
     return
   }
   router.push({
@@ -437,6 +535,12 @@ const handleModuleChange = (nextModuleName: string) => {
     },
     query: route.query
   })
+  closeModuleDropdown()
+}
+
+const openCreateModule = () => {
+  closeModuleDropdown()
+  window.alert('新增模块功能暂未实现')
 }
 
 const openRequirementDetail = (item: PageRequirement) => {
@@ -807,6 +911,12 @@ const goBack = () => {
   })
 }
 
+const handleKeydown = (e: KeyboardEvent) => {
+  if (e.key === 'Escape' && moduleDropdownVisible.value) {
+    closeModuleDropdown()
+  }
+}
+
 watch([pageSize, moduleName], () => {
   currentPage.value = 1
 })
@@ -823,23 +933,17 @@ watch(projectId, () => {
 
 onMounted(() => {
   loadProjectDetail()
+  window.addEventListener('keydown', handleKeydown)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown)
 })
 </script>
 
 <style scoped>
 .module-select {
   width: min(22rem, 100%);
-}
-
-.module-select :deep(.el-select__wrapper) {
-  min-height: 2.5rem;
-  border-radius: 0.75rem;
-  box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
-}
-
-.module-select :deep(.el-select__selected-item) {
-  color: rgb(15 23 42);
-  font-size: 1.25rem;
-  font-weight: 600;
+  cursor: pointer;
 }
 </style>
