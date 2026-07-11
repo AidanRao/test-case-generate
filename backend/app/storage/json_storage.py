@@ -265,12 +265,33 @@ class JsonStorage(StorageBackend):
         return projects
 
     def get_project_counts(self, project_ids):
-        return self.requirement_store.get_project_counts(project_ids)
+        counts = self.requirement_store.get_project_counts(project_ids)
+        for project_id in project_ids:
+            project = self.project_store.get_project(project_id)
+            if not project:
+                continue
+            project_id_key = str(project_id)
+            counts.setdefault(project_id_key, {"module_count": 0, "requirement_count": 0})
+            explicit_modules = {item for item in project.modules if item}
+            requirement_modules = {
+                item.get("module")
+                for item in self.requirement_store.list_requirements(project_id) or []
+                if item.get("module")
+            }
+            counts[project_id_key]["module_count"] = len(explicit_modules | requirement_modules)
+        return counts
 
     def get_project(self, project_id):
         project = self.project_store.get_project(project_id)
         if project:
-            return self._decorate_project(project.to_dict())
+            data = project.to_dict()
+            requirement_modules = [
+                item.get("module")
+                for item in self.requirement_store.list_requirements(project_id) or []
+                if item.get("module")
+            ]
+            data["modules"] = list(dict.fromkeys([*data.get("modules", []), *requirement_modules]))
+            return self._decorate_project(data)
         return None
 
     def project_code_exists(self, code, exclude_project_id=None):
@@ -286,6 +307,14 @@ class JsonStorage(StorageBackend):
 
     def update_project(self, project_id, payload):
         return self.project_store.update_project(project_id, payload)
+
+    def create_module(self, project_id, name):
+        project = self.get_project(project_id)
+        if not project:
+            return None, "not_found"
+        if name in project.get("modules", []):
+            return None, "duplicate"
+        return self.project_store.create_module(project_id, name)
 
     def delete_project(self, project_id):
         deleted = self.project_store.delete_project(project_id)

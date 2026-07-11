@@ -9,18 +9,14 @@
         >
           <el-icon><ArrowLeft /></el-icon>
         </button>
-        <div ref="moduleSelectContainer" class="min-w-0" style="width: min(22rem, 100%);">
-          <p class="text-xs font-medium text-sky-600">{{ projectName }}</p>
-          <div class="module-select mt-1" @click.stop="toggleModuleDropdown">
-            <div class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 shadow-sm">
-              <span class="min-w-0 flex-1 truncate text-lg font-semibold text-slate-800">{{ moduleName }}</span>
-              <div class="flex flex-col items-center gap-0.5 text-slate-400">
-                <el-icon class="text-xs"><ArrowUp /></el-icon>
-                <el-icon class="text-xs"><ArrowDown /></el-icon>
-              </div>
-            </div>
-          </div>
-        </div>
+        <ModuleSelectDropdown
+          :model-value="moduleName"
+          :project-name="projectName"
+          :modules="moduleOptions"
+          :can-create="!isReadOnlyProject"
+          @select="selectModule"
+          @create="openCreateModule"
+        />
         <div class="ml-auto flex flex-wrap items-center gap-2">
           <span class="rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
             需求数 {{ moduleRequirements.length }}
@@ -160,6 +156,12 @@
       @create="handleRequirementCreate"
     />
 
+    <CreateModuleDialog
+      v-model="createModuleVisible"
+      :existing-modules="moduleOptions"
+      @create="handleModuleCreate"
+    />
+
     <RequirementDetailDialog
       v-model="detailVisible"
       :requirement="detailRequirement"
@@ -189,119 +191,43 @@
       @cancel="handleCancel"
     />
 
-    <Teleport to="body">
-      <div
-        v-if="moduleDropdownVisible"
-        class="fixed inset-0 z-50"
-        @click="closeModuleDropdown"
-      >
-        <div class="absolute inset-0 bg-black/20"></div>
-        <div
-          class="absolute rounded-xl border border-slate-200 bg-white shadow-xl z-50"
-          :style="{
-            top: dropdownPosition.top + 'px',
-            left: dropdownPosition.left + 'px',
-            width: Math.min(dropdownPosition.width, 560) + 'px'
-          }"
-        >
-          <div class="flex items-center border-b border-slate-100 px-4 py-3">
-            <div class="relative flex-1">
-              <el-icon class="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400">
-                <Search />
-              </el-icon>
-              <input
-                ref="moduleSearchInput"
-                v-model="moduleSearchQuery"
-                type="text"
-                placeholder="Find Module..."
-                class="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-10 pr-3 text-sm text-slate-700 placeholder:text-slate-400 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
-                @keydown.esc="closeModuleDropdown"
-              />
-            </div>
-            <button
-              class="ml-2 rounded-lg px-2 py-1 text-xs font-medium text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
-              type="button"
-              @click.stop="closeModuleDropdown"
-            >
-              Esc
-            </button>
-          </div>
-          <div class="max-h-64 overflow-y-auto">
-            <button
-              v-for="module in filteredModuleOptions"
-              :key="module"
-              class="flex w-full items-center justify-between px-4 py-3 text-left transition hover:bg-slate-50"
-              :class="module === moduleName ? 'bg-slate-50' : ''"
-              type="button"
-              @click.stop="selectModule(module)"
-            >
-              <span class="flex-1 text-sm font-medium text-slate-700">{{ module }}</span>
-              <el-icon v-if="module === moduleName" class="h-4 w-4 text-sky-600">
-                <Check />
-              </el-icon>
-            </button>
-            <div v-if="filteredModuleOptions.length === 0" class="px-4 py-8 text-center text-sm text-slate-400">
-              未找到匹配的模块
-            </div>
-          </div>
-          <div class="border-t border-slate-100 px-4 py-3">
-            <button
-              class="flex w-full items-center gap-2 rounded-lg border border-dashed border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-500 transition hover:border-slate-300 hover:bg-slate-50"
-              type="button"
-              @click.stop="openCreateModule"
-            >
-              <el-icon class="h-4 w-4"><Plus /></el-icon>
-              新增模块
-            </button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, ArrowUp, ArrowDown, Plus, Search, Check } from '@element-plus/icons-vue'
+import { ArrowLeft, Plus } from '@element-plus/icons-vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import CreateModuleDialog from '../components/CreateModuleDialog.vue'
 import CreateRequirementDialog from '../components/CreateRequirementDialog.vue'
+import ModuleSelectDropdown from '../components/ModuleSelectDropdown.vue'
 import PaginationBar from '../components/PaginationBar.vue'
 import RequirementDetailDialog from '../components/RequirementDetailDialog.vue'
 import type { RequirementDetailItem, RequirementTestCaseItem } from '../components/RequirementDetailDialog.vue'
 import TestCaseDetailDialog from '../components/TestCaseDetailDialog.vue'
 import type { TestCaseDetailItem } from '../components/TestCaseDetailDialog.vue'
 import { useConfirmDialog } from '../composables/useConfirmDialog'
+import { useProjectDetail } from '../composables/useProjectDetail'
 import {
+  buildTestcases,
+  getRequirementIdentity,
+  isSameRequirement,
+  type RequirementWithTestcases
+} from '../composables/useRequirementTestcases'
+import {
+  createModule,
   createRequirement,
   deleteRequirement,
   deleteTestcase,
-  fetchProjectDetail,
   generateTestcasesAsync,
   updateRequirement,
   updateTestcase
 } from '../api/projects'
 import type { CreateRequirementPayload } from '../api/projects'
-import { loadProjects, saveProjects, type ModuleGroup, type ProjectRecord, type Requirement } from '../data/projectStore'
+import { loadProjects, saveProjects, type Requirement } from '../data/projectStore'
 
-type RemoteRequirement = Requirement & {
-  id?: string
-  project_id?: string
-  testcases?: RequirementTestCaseItem[]
-  hasRemoteTestcases?: boolean
-}
-
-type PageRequirement = Requirement & {
-  id?: string
-  project_id?: string
-  testcases?: RequirementTestCaseItem[]
-  hasRemoteTestcases?: boolean
-}
-
-type RemoteModuleGroup = {
-  module: string
-  requirements: RemoteRequirement[]
-}
+type PageRequirement = RequirementWithTestcases & { module: string }
 
 const router = useRouter()
 const route = useRoute()
@@ -309,13 +235,18 @@ const route = useRoute()
 const projectId = computed(() => String(route.params.projectId ?? ''))
 const moduleName = computed(() => String(route.params.moduleName ?? ''))
 
-const localProjects = ref<ProjectRecord[]>(loadProjects())
-const remoteModules = ref<RemoteModuleGroup[] | null>(null)
-const remoteProjectTitle = ref<string | null>(null)
-const remoteProjectSource = ref<'local' | 'uniportal' | null>(null)
-const isLoading = ref(false)
-const loadError = ref('')
+const {
+  localProjects,
+  moduleGroups,
+  projectName,
+  isReadOnlyProject,
+  isLoading,
+  loadError,
+  loadProjectDetail
+} = useProjectDetail({ projectId })
+
 const createRequirementVisible = ref(false)
+const createModuleVisible = ref(false)
 const detailVisible = ref(false)
 const detailRequirement = ref<PageRequirement | null>(null)
 const detailTestcases = ref<RequirementTestCaseItem[]>([])
@@ -323,11 +254,6 @@ const testcaseDetail = ref<TestCaseDetailItem | null>(null)
 const testcaseDetailVisible = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(5)
-const moduleDropdownVisible = ref(false)
-const moduleSearchQuery = ref('')
-const moduleSearchInput = ref<HTMLInputElement | null>(null)
-const moduleSelectContainer = ref<HTMLElement | null>(null)
-const dropdownPosition = ref({ top: 0, left: 0, width: 0 })
 
 const {
   confirmVisible,
@@ -340,27 +266,11 @@ const {
   handleCancel
 } = useConfirmDialog()
 
-const currentProject = computed<ProjectRecord | null>(() =>
-  localProjects.value.find((item) => item.id === projectId.value) ?? null
-)
-
-const moduleGroups = computed<Array<ModuleGroup | RemoteModuleGroup>>(() =>
-  remoteModules.value ?? currentProject.value?.modules ?? []
-)
-
 const moduleOptions = computed(() => {
   const options = moduleGroups.value.map((item) => item.module)
   return moduleName.value && !options.includes(moduleName.value)
     ? [moduleName.value, ...options]
     : options
-})
-
-const filteredModuleOptions = computed(() => {
-  if (!moduleSearchQuery.value) {
-    return moduleOptions.value
-  }
-  const query = moduleSearchQuery.value.toLowerCase()
-  return moduleOptions.value.filter((module) => module.toLowerCase().includes(query))
 })
 
 const selectedModuleGroup = computed(() =>
@@ -372,11 +282,6 @@ const moduleRequirements = computed<PageRequirement[]>(() =>
     ...item,
     module: moduleName.value
   })) as PageRequirement[]
-)
-
-const projectName = computed(() => remoteProjectTitle.value ?? currentProject.value?.name ?? '项目')
-const isReadOnlyProject = computed(() =>
-  remoteProjectSource.value === 'uniportal' || currentProject.value?.source === 'uniportal'
 )
 
 const totalPages = computed(() => Math.max(1, Math.ceil(moduleRequirements.value.length / pageSize.value)))
@@ -398,100 +303,6 @@ const formatTestcaseCount = (item: PageRequirement) => {
   return count > 0 ? `${count} 条` : '未生成'
 }
 
-const normalizeRequirementCode = (requirement: PageRequirement | null) =>
-  requirement?.code || requirement?.ID || ''
-
-const getRequirementIdentity = (item: PageRequirement) => item.id || item.ID || item.code || item.title
-
-const isSameRequirement = (source: PageRequirement, target: PageRequirement) => {
-  const sourceIdentity = getRequirementIdentity(source)
-  const targetIdentity = getRequirementIdentity(target)
-  if (sourceIdentity && targetIdentity) {
-    return sourceIdentity === targetIdentity
-  }
-  return source.title === target.title && source.content === target.content
-}
-
-const mapRemoteModules = (requirements: RemoteRequirement[]): RemoteModuleGroup[] => {
-  const moduleMap = new Map<string, RemoteModuleGroup>()
-  requirements.forEach((item) => {
-    const name = item.module || '未命名模块'
-    if (!moduleMap.has(name)) {
-      moduleMap.set(name, { module: name, requirements: [] })
-    }
-    moduleMap.get(name)!.requirements.push({
-      ...item,
-      ID: item.id ?? item.ID,
-      hasRemoteTestcases: true
-    })
-  })
-  return Array.from(moduleMap.values())
-}
-
-const buildTestcases = (requirement: PageRequirement | null): RequirementTestCaseItem[] => {
-  if (!requirement) return []
-  if (requirement.hasRemoteTestcases) {
-    return requirement.testcases ?? []
-  }
-  if (Array.isArray(requirement.testcases) && requirement.testcases.length > 0) {
-    return requirement.testcases
-  }
-
-  const requirement_code = normalizeRequirementCode(requirement)
-  const requirement_id = requirement.ID || requirement.code || requirement.title
-  const fragments = (requirement.content || '')
-    .split(/[；。]/)
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .slice(0, 3)
-
-  return fragments.map((fragment, index) => {
-    const baseCode = requirement_code || `REQ-${String(index + 1).padStart(3, '0')}`
-    return {
-      id: '',
-      requirement_code,
-      requirement_id,
-      title: `${requirement.title}-测试点${index + 1}`,
-      code: `TC-${baseCode}-${String(index + 1).padStart(3, '0')}`,
-      type: '功能测试',
-      test_steps: [
-        {
-          step_desc: fragment,
-          expectation: '符合预期'
-        }
-      ],
-      test_target_desc: fragment,
-      verify_method: 'TESTING'
-    }
-  })
-}
-
-const loadProjectDetail = async () => {
-  localProjects.value = loadProjects()
-  remoteModules.value = null
-  remoteProjectTitle.value = null
-  remoteProjectSource.value = null
-  loadError.value = ''
-
-  if (!projectId.value || projectId.value.startsWith('local-')) {
-    return
-  }
-
-  isLoading.value = true
-  try {
-    const detail = await fetchProjectDetail(projectId.value)
-    remoteProjectTitle.value = detail.title
-    remoteProjectSource.value = detail.source
-    remoteModules.value = mapRemoteModules(detail.requirements ?? [])
-  } catch {
-    if (!currentProject.value) {
-      loadError.value = '项目详情加载失败，请稍后重试'
-    }
-  } finally {
-    isLoading.value = false
-  }
-}
-
 const openCreateDialog = () => {
   if (isReadOnlyProject.value) {
     window.alert('UniPortal 来源需求为只读，请在 UniPortal 中管理')
@@ -500,31 +311,8 @@ const openCreateDialog = () => {
   createRequirementVisible.value = true
 }
 
-const toggleModuleDropdown = () => {
-  moduleDropdownVisible.value = !moduleDropdownVisible.value
-  if (moduleDropdownVisible.value) {
-    if (moduleSelectContainer.value) {
-      const rect = moduleSelectContainer.value.getBoundingClientRect()
-      dropdownPosition.value = {
-        top: rect.bottom + 8,
-        left: rect.left,
-        width: rect.width
-      }
-    }
-    setTimeout(() => {
-      moduleSearchInput.value?.focus()
-    }, 100)
-  }
-}
-
-const closeModuleDropdown = () => {
-  moduleDropdownVisible.value = false
-  moduleSearchQuery.value = ''
-}
-
 const selectModule = (nextModuleName: string) => {
   if (!nextModuleName || nextModuleName === moduleName.value) {
-    closeModuleDropdown()
     return
   }
   router.push({
@@ -535,12 +323,13 @@ const selectModule = (nextModuleName: string) => {
     },
     query: route.query
   })
-  closeModuleDropdown()
 }
 
 const openCreateModule = () => {
-  closeModuleDropdown()
-  window.alert('新增模块功能暂未实现')
+  if (isReadOnlyProject.value) {
+    return
+  }
+  createModuleVisible.value = true
 }
 
 const openRequirementDetail = (item: PageRequirement) => {
@@ -581,6 +370,40 @@ const createLocalRequirement = (payload: CreateRequirementPayload) => {
     nextModules.push({ module: payload.module, requirements: [nextRequirement] })
   }
 
+  const updatedProjects = projects.map((item) =>
+    item.id === targetProject.id
+      ? {
+          ...item,
+          modules: nextModules,
+          moduleCount: nextModules.length,
+          requirementCount: nextModules.reduce((sum, group) => sum + group.requirements.length, 0)
+        }
+      : item
+  )
+  saveProjects(updatedProjects)
+  localProjects.value = updatedProjects
+  return true
+}
+
+const createLocalModule = (nextModuleName: string) => {
+  const projects = loadProjects()
+  const targetProject = projects.find((item) => item.id === projectId.value)
+  if (!targetProject) {
+    window.alert('未找到项目，无法新增模块')
+    return false
+  }
+  if (targetProject.modules.some((item) => item.module === nextModuleName)) {
+    window.alert('模块名已存在')
+    return false
+  }
+
+  const nextModules = [
+    ...targetProject.modules.map((item) => ({
+      ...item,
+      requirements: [...item.requirements]
+    })),
+    { module: nextModuleName, requirements: [] }
+  ]
   const updatedProjects = projects.map((item) =>
     item.id === targetProject.id
       ? {
@@ -903,18 +726,35 @@ const handleRequirementCreate = async (payload: CreateRequirementPayload) => {
   }
 }
 
+const handleModuleCreate = async (nextModuleName: string) => {
+  if (isReadOnlyProject.value) {
+    return
+  }
+
+  if (projectId.value.startsWith('local-')) {
+    if (createLocalModule(nextModuleName)) {
+      createModuleVisible.value = false
+      selectModule(nextModuleName)
+    }
+    return
+  }
+
+  try {
+    const result = await createModule(projectId.value, nextModuleName)
+    await loadProjectDetail()
+    createModuleVisible.value = false
+    selectModule(result.name || nextModuleName)
+  } catch {
+    window.alert('模块创建失败，请稍后重试')
+  }
+}
+
 const goBack = () => {
   router.push({
     name: 'test-cases',
     params: { projectId: projectId.value },
     query: route.query
   })
-}
-
-const handleKeydown = (e: KeyboardEvent) => {
-  if (e.key === 'Escape' && moduleDropdownVisible.value) {
-    closeModuleDropdown()
-  }
 }
 
 watch([pageSize, moduleName], () => {
@@ -933,17 +773,5 @@ watch(projectId, () => {
 
 onMounted(() => {
   loadProjectDetail()
-  window.addEventListener('keydown', handleKeydown)
-})
-
-onUnmounted(() => {
-  window.removeEventListener('keydown', handleKeydown)
 })
 </script>
-
-<style scoped>
-.module-select {
-  width: min(22rem, 100%);
-  cursor: pointer;
-}
-</style>

@@ -7,6 +7,10 @@ from app.models.requirement import Requirement
 PROJECT_NAME_EXCLUDED_DIRECTORIES = {
     "configuration-test-case-generate",
     "document-validator",
+    "programme-automatic-repair",
+    "unit-test-generate",
+    "traceability-link-recovery",
+    "ct8114",
 }
 
 

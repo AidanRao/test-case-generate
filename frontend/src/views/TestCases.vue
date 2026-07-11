@@ -136,7 +136,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft, Download } from '@element-plus/icons-vue'
-import { buildRequirements, loadProjects, type ModuleGroup, type Requirement } from '../data/projectStore'
+import { buildRequirements, type Requirement } from '../data/projectStore'
 import TestCaseBoard from '../components/TestCaseBoard.vue'
 import type { BoardNode } from '../components/TestCaseBoard.vue'
 import RequirementList from '../components/RequirementList.vue'
@@ -148,12 +148,15 @@ import type { TestCaseDetailItem } from '../components/TestCaseDetailDialog.vue'
 import ExportTestcasesDialog from '../components/ExportTestcasesDialog.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import { useConfirmDialog } from '../composables/useConfirmDialog'
+import { useProjectDetail } from '../composables/useProjectDetail'
+import {
+  buildTestcases,
+  type RequirementWithTestcases
+} from '../composables/useRequirementTestcases'
 import { useTestcaseExport } from '../composables/useTestcaseExport'
 import {
   deleteRequirement,
   deleteTestcase,
-  fetchProjectDetail,
-  fetchProjectQuality,
   fetchTestcaseGenerateStatus,
   generateTestcasesAsync,
   updateRequirement,
@@ -166,33 +169,21 @@ const router = useRouter()
 const route = useRoute()
 
 const projectId = computed(() => String(route.params.projectId ?? ''))
-const currentProject = computed(() => {
-  const list = loadProjects()
-  if (list.length === 0) {
-    return {
-      id: 'local-0',
-      name: '暂无项目',
-      code: '',
-      modules: [] as ModuleGroup[]
-    }
-  }
-  return list.find((item) => item.id === projectId.value) ?? list[0]
+type RequirementWithCases = RequirementWithTestcases & { module: string }
+
+const {
+  remoteQualityInfo,
+  isRemoteProject,
+  moduleGroups,
+  projectName,
+  isReadOnlyProject,
+  loadProjectDetail
+} = useProjectDetail({
+  projectId,
+  fallbackToFirstProject: true,
+  includeQuality: true
 })
 
-type RequirementWithCases = Requirement & { testcases?: RequirementTestCaseItem[]; hasRemoteTestcases?: boolean }
-type RemoteRequirement = ModuleGroup['requirements'][number] & {
-  testcases?: RequirementTestCaseItem[]
-  hasRemoteTestcases?: boolean
-  ID?: string
-}
-type RemoteModuleGroup = ModuleGroup & { requirements: RemoteRequirement[] }
-
-const remoteModules = ref<RemoteModuleGroup[] | null>(null)
-const remoteProjectTitle = ref<string | null>(null)
-const remoteProjectSource = ref<'local' | 'uniportal' | null>(null)
-const remoteQualityInfo = ref<QualityInfoResponse | null>(null)
-
-const moduleGroups = computed<ModuleGroup[]>(() => remoteModules.value ?? currentProject.value?.modules ?? [])
 const requirements = computed<RequirementWithCases[]>(() => buildRequirements(moduleGroups.value) as RequirementWithCases[])
 const requirementItems = computed(() => {
   const isRunning = generationStatus.value?.status === 'running'
@@ -214,10 +205,6 @@ const requirementGeneratingMap = computed(() => {
   })
   return map
 })
-const projectName = computed(() => remoteProjectTitle.value ?? currentProject.value?.name ?? '项目')
-const isReadOnlyProject = computed(() => (
-  remoteProjectSource.value === 'uniportal' || currentProject.value?.source === 'uniportal'
-))
 const selectedRequirementIndex = ref(0)
 const requirementTypeStats = computed(() => {
   const stats = new Map<string, number>()
@@ -296,7 +283,6 @@ const {
   handleConfirm,
   handleCancel
 } = useConfirmDialog()
-const isRemoteProject = computed(() => !!projectId.value && !projectId.value.startsWith('local-'))
 
 const selectRequirement = (index: number) => {
   selectedRequirementIndex.value = index
@@ -376,7 +362,7 @@ const handleRequirementSave = async (payload: RequirementDetailItem) => {
       type: payload.type,
       content: payload.content
     })
-    await loadRemoteProjectDetail()
+    await loadProjectDetail()
     openConfirm({
       title: '生成测试用例',
       message: '是否基于最新需求重新生成测试用例？已生成的用例将被替换。',
@@ -384,7 +370,7 @@ const handleRequirementSave = async (payload: RequirementDetailItem) => {
       onConfirm: async () => {
         try {
           await generateTestcasesAsync(projectId.value, [requirementId])
-          await loadRemoteProjectDetail()
+          await loadProjectDetail()
           refreshGenerationStatus()
         } catch {
           window.alert('测试用例生成任务提交失败，请稍后重试')
@@ -418,7 +404,7 @@ const handleRequirementDelete = async (payload: RequirementDetailItem) => {
     onConfirm: async () => {
       try {
         await deleteRequirement(projectId.value, requirementId)
-        await loadRemoteProjectDetail()
+        await loadProjectDetail()
         detailVisible.value = false
       } catch {
         window.alert('需求删除失败，请稍后重试')
@@ -445,7 +431,7 @@ const handleRequirementGenerateTestcases = async () => {
     onConfirm: async () => {
       try {
         await generateTestcasesAsync(projectId.value, [requirementId])
-        await loadRemoteProjectDetail()
+        await loadProjectDetail()
         refreshGenerationStatus()
       } catch {
         window.alert('测试用例生成任务提交失败，请稍后重试')
@@ -470,7 +456,7 @@ const handleProjectGenerateTestcases = async () => {
     onConfirm: async () => {
       try {
         await generateTestcasesAsync(projectId.value)
-        await loadRemoteProjectDetail()
+        await loadProjectDetail()
         refreshGenerationStatus()
       } catch {
         window.alert('测试用例生成任务提交失败，请稍后重试')
@@ -496,7 +482,7 @@ const handleTestcaseSave = async (payload: TestCaseDetailItem) => {
       test_target_desc: payload.test_target_desc,
       verify_method: payload.verify_method
     })
-    await loadRemoteProjectDetail()
+    await loadProjectDetail()
     testcaseDetailVisible.value = false
   } catch {
     window.alert('测试用例更新失败，请稍后重试')
@@ -520,7 +506,7 @@ const handleTestcaseDelete = async (payload: TestCaseDetailItem) => {
     onConfirm: async () => {
       try {
         await deleteTestcase(projectId.value, payload.id as string)
-        await loadRemoteProjectDetail()
+        await loadProjectDetail()
         testcaseDetailVisible.value = false
       } catch {
         window.alert('测试用例删除失败，请稍后重试')
@@ -594,51 +580,6 @@ const nodeSizes = {
   testcase: { width: 200, height: 30 }
 }
 
-const normalizeRequirementCode = (requirement: Requirement | null) =>
-  requirement?.code || requirement?.ID || ''
-
-const buildTestcases = (requirement: RequirementWithCases | null): RequirementTestCaseItem[] => {
-  if (!requirement) return []
-  if (requirement.hasRemoteTestcases) {
-    return requirement.testcases ?? []
-  }
-  if (Array.isArray(requirement.testcases) && requirement.testcases.length > 0) {
-    return requirement.testcases
-  }
-
-  const requirement_code = normalizeRequirementCode(requirement)
-  const requirement_id = requirement.ID || requirement.code || requirement.title
-  const fragments = (requirement.content || '')
-    .split(/[；。]/)
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .slice(0, 3)
-
-  if (fragments.length === 0) {
-    return []
-  }
-
-  return fragments.map((fragment, index) => {
-    const baseCode = requirement_code || `REQ-${String(index + 1).padStart(3, '0')}`
-    return {
-      id: '',
-      requirement_code,
-      requirement_id,
-      title: `${requirement.title}-测试点${index + 1}`,
-      code: `TC-${baseCode}-${String(index + 1).padStart(3, '0')}`,
-      type: '功能测试',
-      test_steps: [
-        {
-          step_desc: fragment,
-          expectation: '符合预期'
-        }
-      ],
-      test_target_desc: fragment,
-      verify_method: 'TESTING'
-    }
-  })
-}
-
 const { exportDialogVisible, openExportDialog, handleExport } = useTestcaseExport({
   moduleGroups,
   projectName,
@@ -707,82 +648,6 @@ watch(requirements, (nextRequirements) => {
   }
 }, { immediate: true })
 
-const mapRemoteModules = (remoteRequirements: Array<{
-  id: string
-  title: string
-  type: string
-  code: string
-  content: string
-  project_id: string
-  module: string
-  testcases: Array<{
-    requirement_code: string
-    requirement_id: string
-    id: string
-    title: string
-    code: string
-    type: string
-    test_steps: Array<{ expectation: string; step_desc: string }>
-    test_target_desc: string
-    verify_method: string
-  }>
-}>): RemoteModuleGroup[] => {
-  const moduleMap = new Map<string, RemoteModuleGroup>()
-  remoteRequirements.forEach((item) => {
-    const moduleName = item.module || '未命名模块'
-    if (!moduleMap.has(moduleName)) {
-      moduleMap.set(moduleName, { module: moduleName, requirements: [] })
-    }
-    const testcases = (item.testcases || []).map((tc) => ({
-      requirement_code: tc.requirement_code,
-      requirement_id: tc.requirement_id,
-      id: tc.id,
-      title: tc.title,
-      code: tc.code,
-      type: tc.type,
-      test_steps: tc.test_steps ?? [],
-      test_target_desc: tc.test_target_desc,
-      verify_method: tc.verify_method
-    }))
-    moduleMap.get(moduleName)!.requirements.push({
-      ID: item.id,
-      title: item.title,
-      type: item.type,
-      code: item.code,
-      content: item.content,
-      testcases,
-      hasRemoteTestcases: true
-    })
-  })
-  return Array.from(moduleMap.values())
-}
-
-const loadRemoteProjectDetail = async () => {
-  const remoteId = projectId.value
-  if (!remoteId) {
-    remoteModules.value = null
-    remoteProjectTitle.value = null
-    remoteProjectSource.value = null
-    remoteQualityInfo.value = null
-    return
-  }
-  try {
-    const [detail, quality] = await Promise.all([
-      fetchProjectDetail(remoteId),
-      fetchProjectQuality(remoteId).catch(() => null)
-    ])
-    remoteProjectTitle.value = detail.title
-    remoteProjectSource.value = detail.source
-    remoteModules.value = mapRemoteModules(detail.requirements ?? [])
-    remoteQualityInfo.value = quality
-  } catch {
-    remoteModules.value = null
-    remoteProjectTitle.value = null
-    remoteProjectSource.value = null
-    remoteQualityInfo.value = null
-  }
-}
-
 const stopStatusPolling = () => {
   if (statusPollingTimer.value) {
     window.clearInterval(statusPollingTimer.value)
@@ -803,7 +668,7 @@ const refreshGenerationStatus = async (allowStartPolling = true) => {
     if (status.status === 'running' && allowStartPolling) {
       if (!statusPollingTimer.value) {
         statusPollingTimer.value = window.setInterval(() => {
-          loadRemoteProjectDetail()
+          loadProjectDetail()
           refreshGenerationStatus(false)
         }, 5000)
       }
@@ -819,12 +684,12 @@ const refreshGenerationStatus = async (allowStartPolling = true) => {
 }
 
 onMounted(() => {
-  loadRemoteProjectDetail()
+  loadProjectDetail()
   refreshGenerationStatus()
 })
 
 watch(projectId, () => {
-  loadRemoteProjectDetail()
+  loadProjectDetail()
   refreshGenerationStatus()
 })
 
