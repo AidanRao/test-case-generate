@@ -8,15 +8,6 @@ class StorageBackend:
     def get_project(self, project_id):
         raise NotImplementedError()
 
-    def list_system_tasks(self):
-        raise NotImplementedError()
-
-    def save_system_task(self, task_id, payload):
-        raise NotImplementedError()
-
-    def run_system_task(self, task_id):
-        raise NotImplementedError()
-
     def create_project(self, payload):
         raise NotImplementedError()
 

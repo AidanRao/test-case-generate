@@ -2,12 +2,11 @@ class SystemTaskService:
     MIN_INTERVAL_SECONDS = 5
     MAX_INTERVAL_SECONDS = 86400
 
-    def __init__(self, storage, scheduler=None):
-        self.storage = storage
-        self.scheduler = scheduler
+    def __init__(self, task_manager):
+        self.task_manager = task_manager
 
     def list_tasks(self):
-        return self.storage.list_system_tasks(self.scheduler)
+        return self.task_manager.list_tasks()
 
     def update_task(self, task_id, payload):
         enabled = payload.get("enabled")
@@ -30,21 +29,14 @@ class SystemTaskService:
             "interval_seconds": interval_seconds,
             "kwargs": kwargs,
         }
-        task = self.storage.save_system_task(
-            task_id,
-            update_payload,
-            self.scheduler,
-        )
+        task = self.task_manager.update_task(task_id, update_payload)
         return (task, None) if task else (None, "not_found")
 
     def run_task(self, task_id):
-        task = next(
-            (item for item in self.storage.list_system_tasks(self.scheduler) if item.get("id") == task_id),
-            None,
-        )
+        task = self.task_manager.get_task(task_id)
         if task is None:
             return None, "not_found"
         if not task.get("available"):
             return None, "unavailable"
-        executed = self.storage.run_system_task(task_id, self.scheduler)
+        executed = self.task_manager.run_task(task_id)
         return (executed, None) if executed else (None, "not_found")

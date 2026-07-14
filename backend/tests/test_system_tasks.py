@@ -5,7 +5,7 @@ import unittest
 from unittest.mock import patch
 
 from app.storage.json_storage import JsonStorage
-from app.scheduler import scheduler, shutdown_scheduler, start_scheduler
+from app.scheduler import SystemTaskManager
 
 
 class SystemTasksTest(unittest.TestCase):
@@ -14,28 +14,26 @@ class SystemTasksTest(unittest.TestCase):
         self.shared = tempfile.TemporaryDirectory()
         self.addCleanup(self.local.cleanup)
         self.addCleanup(self.shared.cleanup)
-        shutdown_scheduler()
-        scheduler.remove_all_jobs()
 
-    def tearDown(self):
-        shutdown_scheduler()
-        scheduler.remove_all_jobs()
+    def create_manager(self, storage, enabled=True, interval_seconds=30):
+        with patch.dict(
+            os.environ,
+            {
+                "UNIPORTAL_SYNC_ENABLED": "true" if enabled else "false",
+                "UNIPORTAL_SYNC_INTERVAL_SECONDS": str(interval_seconds),
+            },
+            clear=False,
+        ):
+            manager = SystemTaskManager(storage.system_task_store, storage)
+            manager.start()
+        self.addCleanup(manager.shutdown)
+        return manager
 
     def test_task_config_is_persisted_and_can_start_sync_runner(self):
-        storage = JsonStorage(self.local.name, self.shared.name, False, 30)
-        from app.scheduler import sync_default_jobs
+        storage = JsonStorage(self.local.name, self.shared.name)
+        manager = self.create_manager(storage, enabled=False, interval_seconds=30)
 
-        sync_default_jobs(
-            scheduler,
-            storage.system_task_store,
-            runtime_kwargs={"uniportal_sync": {"storage": storage}},
-            default_overrides={
-                "uniportal_sync": {"enabled": False, "interval_seconds": 30}
-            },
-        )
-        start_scheduler()
-
-        initial = storage.list_system_tasks(scheduler)[0]
+        initial = manager.list_tasks()[0]
         self.assertEqual(initial["id"], "uniportal_sync")
         self.assertFalse(initial["enabled"])
         self.assertEqual(initial["interval_seconds"], 30)
@@ -45,25 +43,32 @@ class SystemTasksTest(unittest.TestCase):
         )
         self.assertFalse(initial["running"])
 
-        updated = storage.save_system_task(
+        updated = manager.update_task(
             "uniportal_sync",
             {
                 "enabled": True,
                 "interval_seconds": 15,
                 "kwargs": {"requirement_path": "custom/requirement.json"},
             },
-            scheduler,
         )
         self.assertTrue(updated["enabled"])
         self.assertEqual(updated["interval_seconds"], 15)
-        self.assertEqual(updated["kwargs"], {"requirement_path": "custom/requirement.json"})
+        self.assertEqual(
+            updated["kwargs"], {"requirement_path": "custom/requirement.json"}
+        )
         self.assertTrue(updated["running"])
 
-        with open(os.path.join(self.local.name, "system_tasks.json"), "r", encoding="utf-8") as source:
+        with open(
+            os.path.join(self.local.name, "system_tasks.json"),
+            "r",
+            encoding="utf-8",
+        ) as source:
             stored = json.load(source)[0]
         self.assertTrue(stored["enabled"])
         self.assertEqual(stored["interval_seconds"], 15)
-        self.assertEqual(stored["kwargs"], {"requirement_path": "custom/requirement.json"})
+        self.assertEqual(
+            stored["kwargs"], {"requirement_path": "custom/requirement.json"}
+        )
         self.assertNotIn("trigger", stored)
 
     def test_system_task_api_validates_and_applies_updates(self):
@@ -80,6 +85,7 @@ class SystemTasksTest(unittest.TestCase):
             from app import create_app
 
             app = create_app()
+            self.addCleanup(app.extensions["system_task_manager"].shutdown)
             app.testing = True
             client = app.test_client()
 
@@ -110,7 +116,9 @@ class SystemTasksTest(unittest.TestCase):
             task = response.get_json()["data"]
             self.assertTrue(task["enabled"])
             self.assertEqual(task["interval_seconds"], 20)
-            self.assertEqual(task["kwargs"], {"requirement_path": "custom/requirement.json"})
+            self.assertEqual(
+                task["kwargs"], {"requirement_path": "custom/requirement.json"}
+            )
             self.assertTrue(task["running"])
 
             disabled = client.put(
@@ -121,35 +129,24 @@ class SystemTasksTest(unittest.TestCase):
             self.assertFalse(disabled["running"])
 
     def test_running_task_stays_scheduled_after_manual_run(self):
-        storage = JsonStorage(self.local.name, self.shared.name, True, 30)
-        from app.scheduler import sync_default_jobs
-
-        sync_default_jobs(
-            scheduler,
-            storage.system_task_store,
-            runtime_kwargs={"uniportal_sync": {"storage": storage}},
-            default_overrides={
-                "uniportal_sync": {"enabled": True, "interval_seconds": 30}
-            },
-        )
-        storage.save_system_task(
+        storage = JsonStorage(self.local.name, self.shared.name)
+        manager = self.create_manager(storage, enabled=True, interval_seconds=30)
+        manager.update_task(
             "uniportal_sync",
             {
                 "enabled": True,
                 "interval_seconds": 15,
                 "kwargs": {"requirement_path": "custom/requirement.json"},
             },
-            scheduler,
         )
-        start_scheduler()
 
         with patch.object(storage, "synchronize_uniportal") as synchronize:
-            task = storage.run_system_task("uniportal_sync", scheduler)
+            task = manager.run_task("uniportal_sync")
 
         synchronize.assert_called_once_with("custom/requirement.json")
         self.assertTrue(task["running"])
         self.assertEqual(
-            scheduler.get_job("uniportal_sync").kwargs["requirement_path"],
+            manager.scheduler.get_job("uniportal_sync").kwargs["requirement_path"],
             "custom/requirement.json",
         )
 
@@ -166,6 +163,7 @@ class SystemTasksTest(unittest.TestCase):
             from app import create_app
 
             app = create_app()
+            self.addCleanup(app.extensions["system_task_manager"].shutdown)
             app.testing = True
             storage = app.config["STORAGE"]
             client = app.test_client()
@@ -181,35 +179,25 @@ class SystemTasksTest(unittest.TestCase):
             self.assertEqual(missing.status_code, 404)
 
     def test_manual_uniportal_run_uses_registered_kwargs(self):
-        storage = JsonStorage(self.local.name, self.shared.name, True, 30)
-        from app.scheduler import sync_default_jobs
-
-        sync_default_jobs(
-            scheduler,
-            storage.system_task_store,
-            runtime_kwargs={"uniportal_sync": {"storage": storage}},
-            default_overrides={
-                "uniportal_sync": {"enabled": True, "interval_seconds": 30}
-            },
-        )
+        storage = JsonStorage(self.local.name, self.shared.name)
+        manager = self.create_manager(storage, enabled=True, interval_seconds=30)
 
         with patch.object(storage, "synchronize_uniportal") as synchronize:
-            storage.run_system_task("uniportal_sync", scheduler)
+            manager.run_task("uniportal_sync")
 
         synchronize.assert_called_once_with("document-validator/requirement.json")
 
-        storage.save_system_task(
+        manager.update_task(
             "uniportal_sync",
             {
                 "enabled": True,
                 "interval_seconds": 30,
                 "kwargs": {"requirement_path": "custom/requirement.json"},
             },
-            scheduler,
         )
 
         with patch.object(storage, "synchronize_uniportal") as synchronize:
-            storage.run_system_task("uniportal_sync", scheduler)
+            manager.run_task("uniportal_sync")
 
         synchronize.assert_called_once_with("custom/requirement.json")
 
@@ -237,9 +225,11 @@ class SystemTasksTest(unittest.TestCase):
         self.assertEqual(task.kwargs, {"value": 1})
 
     def test_registry_sync_adds_missing_task_and_preserves_existing_config(self):
-        from app.scheduler import sync_default_jobs
-
-        with open(os.path.join(self.local.name, "system_tasks.json"), "w", encoding="utf-8") as target:
+        with open(
+            os.path.join(self.local.name, "system_tasks.json"),
+            "w",
+            encoding="utf-8",
+        ) as target:
             json.dump(
                 [
                     {
@@ -254,23 +244,16 @@ class SystemTasksTest(unittest.TestCase):
                 ],
                 target,
             )
-        storage = JsonStorage(self.local.name, self.shared.name, False, 30)
-
-        sync_default_jobs(
-            scheduler,
-            storage.system_task_store,
-            runtime_kwargs={"uniportal_sync": {"storage": storage}},
-            default_overrides={
-                "uniportal_sync": {"enabled": False, "interval_seconds": 30}
-            },
-        )
-        start_scheduler()
+        storage = JsonStorage(self.local.name, self.shared.name)
+        manager = self.create_manager(storage, enabled=False, interval_seconds=30)
 
         stored = storage.system_task_store.get_task("uniportal_sync")
         self.assertTrue(stored["enabled"])
         self.assertEqual(stored["interval_seconds"], 42)
-        self.assertEqual(stored["kwargs"], {"requirement_path": "custom/requirement.json"})
-        job = scheduler.get_job("uniportal_sync")
+        self.assertEqual(
+            stored["kwargs"], {"requirement_path": "custom/requirement.json"}
+        )
+        job = manager.scheduler.get_job("uniportal_sync")
         self.assertIsNotNone(job)
         self.assertEqual(job.trigger.interval.total_seconds(), 42)
         self.assertEqual(job.kwargs["requirement_path"], "custom/requirement.json")

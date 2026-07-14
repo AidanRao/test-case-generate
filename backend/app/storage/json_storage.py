@@ -17,14 +17,10 @@ from app.storage.uniportal_source import UniPortalRequirementSource
 
 
 class JsonStorage(StorageBackend):
-    UNIPORTAL_SYNC_TASK_ID = "uniportal_sync"
-
     def __init__(
         self,
         data_dir,
         uniportal_storage_path=None,
-        uniportal_sync_enabled=True,
-        uniportal_sync_interval_seconds=300,
     ):
         self.data_dir = data_dir
         os.makedirs(self.data_dir, exist_ok=True)
@@ -206,41 +202,6 @@ class JsonStorage(StorageBackend):
                 )
             self.quality_store.delete_by_project(project_id)
         self._save_sync_entries(updated_entries)
-
-    def _task_runtime(self, task, scheduler=None):
-        available = self.uniportal_source.enabled
-        running = False
-        if scheduler is not None:
-            job = scheduler.get_job(task.get("id"))
-            if job is not None:
-                next_run = getattr(job, 'next_run_time', None)
-                running = bool(next_run is not None)
-        return {**task, "available": available, "running": running}
-
-    def list_system_tasks(self, scheduler=None):
-        return [
-            self._task_runtime(task, scheduler)
-            for task in self.system_task_store.list_tasks()
-        ]
-
-    def save_system_task(self, task_id, payload, scheduler=None):
-        task = self.system_task_store.save_task(task_id, payload)
-        if task is None:
-            return None
-        if scheduler is not None:
-            from app.scheduler import update_job
-            update_job(scheduler, task)
-        return self._task_runtime(task, scheduler)
-
-    def run_system_task(self, task_id, scheduler=None):
-        task = self.system_task_store.get_task(task_id)
-        if task is None or task_id != self.UNIPORTAL_SYNC_TASK_ID:
-            return None
-        from app.scheduler import execute_task
-
-        if not execute_task(task_id, task, {task_id: {"storage": self}}):
-            return None
-        return self._task_runtime(task, scheduler)
 
     def list_projects(self, keyword=None, portal_project_id=None):
         entries_by_project_id = self._sync_entries_by_project_id()
