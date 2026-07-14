@@ -17,7 +17,6 @@ class ProjectService:
             return None, "duplicate"
         project_id = self.storage.create_project(payload)
         requirements = payload.get("requirements", [])
-        print(requirements)
         if requirements:
             self.storage.complete_requirements(project_id, requirements, "project")
         return project_id, None
@@ -31,6 +30,14 @@ class ProjectService:
 
     def delete_project(self, project_id):
         return self.storage.delete_project(project_id)
+
+    def create_module(self, project_id, payload):
+        name = str(payload.get("name", "")).strip()
+        if not name:
+            return None, "invalid"
+        if hasattr(self.storage, "create_module"):
+            return self.storage.create_module(project_id, name)
+        return None, "not_found"
 
     def _code_exists(self, code, exclude_project_id=None):
         if not code:

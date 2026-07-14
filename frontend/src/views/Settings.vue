@@ -131,18 +131,20 @@
 
           <template v-else>
             <div class="overflow-x-auto rounded-xl border border-slate-200">
-              <table class="w-full min-w-[700px] table-fixed divide-y divide-slate-200">
+              <table class="w-full min-w-[980px] table-fixed divide-y divide-slate-200">
                 <colgroup>
-                  <col class="w-[36%]" />
-                  <col class="w-[22%]" />
-                  <col class="w-[14%]" />
-                  <col class="w-[28%]" />
+                  <col class="w-[27%]" />
+                  <col class="w-[17%]" />
+                  <col class="w-[12%]" />
+                  <col class="w-[26%]" />
+                  <col class="w-[18%]" />
                 </colgroup>
                 <thead class="bg-slate-50">
                   <tr>
                     <th class="px-5 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">任务</th>
                     <th class="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">执行间隔（秒）</th>
                     <th class="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">启用</th>
+                    <th class="px-4 py-4 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">kwargs</th>
                     <th class="px-5 py-4 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">操作</th>
                   </tr>
                 </thead>
@@ -174,6 +176,14 @@
                         {{ task.enabled ? '启用' : '停用' }}
                       </label>
                     </td>
+                    <td class="px-4 py-5">
+                      <textarea
+                        v-model="task.kwargsText"
+                        rows="4"
+                        class="w-full resize-y rounded-lg border border-slate-200 px-3 py-2 font-mono text-xs leading-relaxed text-slate-700 focus:border-sky-400 focus:outline-none disabled:bg-slate-50 disabled:text-slate-400"
+                        :disabled="isTaskSaving(task.id)"
+                      />
+                    </td>
                     <td class="whitespace-nowrap px-5 py-5 text-right">
                       <div class="inline-flex items-center gap-2">
                         <button
@@ -194,7 +204,7 @@
                     </td>
                   </tr>
                   <tr v-if="tasks.length === 0">
-                    <td colspan="4" class="px-6 py-10 text-center text-sm text-slate-400">暂无系统任务</td>
+                    <td colspan="5" class="px-6 py-10 text-center text-sm text-slate-400">暂无系统任务</td>
                   </tr>
                 </tbody>
               </table>
@@ -220,7 +230,9 @@ const route = useRoute()
 const loading = ref(true)
 const saving = ref(false)
 const tasksLoading = ref(true)
-const tasks = ref<SystemTask[]>([])
+type SystemTaskEditor = SystemTask & { kwargsText: string }
+
+const tasks = ref<SystemTaskEditor[]>([])
 const tasksSaving = reactive<Record<string, boolean>>({})
 const tasksRunning = reactive<Record<string, boolean>>({})
 
@@ -285,7 +297,7 @@ const resetForm = () => {
 const loadTasks = async () => {
   tasksLoading.value = true
   try {
-    tasks.value = await getSystemTasks()
+    tasks.value = (await getSystemTasks()).map(toTaskEditor)
   } catch {
     ElMessage.error('定时任务配置加载失败')
   } finally {
@@ -293,27 +305,44 @@ const loadTasks = async () => {
   }
 }
 
+const toTaskEditor = (task: SystemTask): SystemTaskEditor => ({
+  ...task,
+  kwargsText: JSON.stringify(task.kwargs ?? {}, null, 2)
+})
+
 const replaceTask = (updated: SystemTask) => {
   const index = tasks.value.findIndex((task) => task.id === updated.id)
   if (index >= 0) {
-    tasks.value[index] = updated
+    tasks.value[index] = toTaskEditor(updated)
   }
 }
 
 const isTaskSaving = (taskId: string) => Boolean(tasksSaving[taskId])
 const isTaskRunning = (taskId: string) => Boolean(tasksRunning[taskId])
 
-const saveTaskConfig = async (task: SystemTask) => {
+const saveTaskConfig = async (task: SystemTaskEditor) => {
   const interval = Number(task.interval_seconds)
   if (!Number.isInteger(interval) || interval < 5 || interval > 86400) {
     ElMessage.warning('执行间隔应为 5 至 86400 秒之间的整数')
+    return
+  }
+  let kwargs: Record<string, unknown>
+  try {
+    const parsed = JSON.parse(task.kwargsText || '{}')
+    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
+      throw new Error('kwargs must be an object')
+    }
+    kwargs = parsed as Record<string, unknown>
+  } catch {
+    ElMessage.warning('kwargs 必须是合法的 JSON 对象')
     return
   }
   tasksSaving[task.id] = true
   try {
     const updated = await updateSystemTask(task.id, {
       enabled: task.enabled,
-      interval_seconds: interval
+      interval_seconds: interval,
+      kwargs
     })
     replaceTask(updated)
     ElMessage.success('定时任务配置已保存')
@@ -324,7 +353,7 @@ const saveTaskConfig = async (task: SystemTask) => {
   }
 }
 
-const runTaskNow = async (task: SystemTask) => {
+const runTaskNow = async (task: SystemTaskEditor) => {
   tasksRunning[task.id] = true
   try {
     const updated = await runSystemTask(task.id)

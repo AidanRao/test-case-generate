@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Projects from '../views/Projects.vue'
 import TestCases from '../views/TestCases.vue'
+import ModuleRequirements from '../views/ModuleRequirements.vue'
 import Settings from '../views/Settings.vue'
 
 const router = createRouter({
@@ -19,6 +20,11 @@ const router = createRouter({
       path: '/projects/:projectId/test-cases',
       name: 'test-cases',
       component: TestCases
+    },
+    {
+      path: '/projects/:projectId/modules/:moduleName/requirements',
+      name: 'module-requirements',
+      component: ModuleRequirements
     },
     {
       path: '/settings',

@@ -80,6 +80,23 @@ def update_project(project_id):
     return ok({"updated": True})
 
 
+@projects_bp.post("/projects/<project_id>/modules")
+def create_module(project_id):
+    payload = request.get_json(silent=True) or {}
+    storage = current_app.config["STORAGE"]
+    if storage.is_read_only_project(project_id):
+        return error(40301, "UniPortal 来源项目为只读，请在 UniPortal 中管理", 403)
+    service = ProjectService(storage)
+    module_name, err = service.create_module(project_id, payload)
+    if err == "invalid":
+        return error(40001, "模块名不能为空", 400)
+    if err == "duplicate":
+        return error(40901, "模块名已存在", 409)
+    if err == "not_found":
+        return error(40401, "资源不存在", 404)
+    return ok({"name": module_name})
+
+
 @projects_bp.delete("/projects/<project_id>")
 def delete_project(project_id):
     storage = current_app.config["STORAGE"]

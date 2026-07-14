@@ -1,15 +1,101 @@
 import json
 import os
-import uuid
 
 from app.models.requirement import Requirement
 
 
+PROJECT_NAME_EXCLUDED_DIRECTORIES = {
+    "configuration-test-case-generate",
+    "document-validator",
+    "programme-automatic-repair",
+    "unit-test-generate",
+    "traceability-link-recovery",
+    "ct8114",
+}
+
+
+class DocumentValidatorRequirementAdapter:
+    def normalize(self, project_id, payload):
+        if not isinstance(payload, list):
+            return []
+        nodes_by_id = {
+            str(item.get("id")): item
+            for item in payload
+            if isinstance(item, dict) and item.get("id") is not None
+        }
+        normalized = []
+        for item in payload:
+            if not isinstance(item, dict) or not self._is_requirement(
+                item.get("is_req")
+            ):
+                continue
+            content = self._build_content(item.get("content"), item.get("tables"))
+            requirement_data = {
+                "id": str(item.get("id", "")),
+                "title": item.get("title", ""),
+                "type": item.get("type", ""),
+                "code": str(item.get("id", "")),
+                "content": content,
+            }
+            requirement = Requirement.from_dict(
+                requirement_data,
+                module=self._find_module(item, nodes_by_id),
+                project_id=project_id,
+            )
+            normalized.append(requirement.to_dict())
+        return normalized
+
+    def _is_requirement(self, value):
+        return value not in (0, "0", None, False)
+
+    def _find_module(self, item, nodes_by_id):
+        parent = nodes_by_id.get(str(item.get("parent_id")))
+        return parent.get("title", "") if parent else ""
+
+    def _build_content(self, content, tables):
+        parts = []
+        if content:
+            parts.append(str(content))
+        if isinstance(tables, list):
+            for table in tables:
+                rendered = self._render_table(table)
+                if rendered:
+                    parts.append(rendered)
+        return "\n\n".join(parts)
+
+    def _render_table(self, table):
+        if not isinstance(table, dict):
+            return json.dumps(table, ensure_ascii=False)
+        lines = []
+        caption = table.get("caption") or table.get("id")
+        if caption:
+            lines.append(f"表格：{caption}")
+        headers = table.get("headers")
+        if isinstance(headers, list) and headers:
+            lines.append(self._render_markdown_table_row(headers))
+            lines.append(self._render_markdown_table_row(["---"] * len(headers)))
+        rows = table.get("rows")
+        if isinstance(rows, list):
+            for row in rows:
+                if isinstance(row, list):
+                    lines.append(self._render_markdown_table_row(row))
+                else:
+                    lines.append(str(row))
+        return "\n".join(lines)
+
+    def _render_markdown_table_row(self, row):
+        return "| " + " | ".join(self._render_markdown_table_cell(item) for item in row) + " |"
+
+    def _render_markdown_table_cell(self, value):
+        return str(value).replace("|", "\\|").replace("\n", "<br>")
+
+
 class UniPortalRequirementSource:
-    """Read-only view over requirements.json files uploaded through UniPortal."""
+    """Read-only view over Document Validator requirement files uploaded through UniPortal."""
 
     def __init__(self, storage_path):
         self.storage_path = os.path.abspath(storage_path) if storage_path else None
+        self.document_validator_adapter = DocumentValidatorRequirementAdapter()
 
     @property
     def enabled(self):
@@ -41,89 +127,60 @@ class UniPortalRequirementSource:
 
     def _project_name(self, item_id, item_path):
         source_roots = self._visible_directories(item_path)
-        return source_roots[0] if source_roots else item_id
+        source_roots = [
+            name for name in source_roots if name not in PROJECT_NAME_EXCLUDED_DIRECTORIES
+        ]
+        return source_roots[0] if source_roots else None
 
-    def _find_requirement_files(self, item_path):
-        source_roots = self._visible_directories(item_path)
-        candidates = [
-            os.path.join(item_path, source_roots[0], "requirements.json")
-        ] if source_roots else []
-        # Keep reading the former flat layout while existing shared data is migrated.
-        candidates.append(os.path.join(item_path, "requirements.json"))
-        return [path for path in candidates if os.path.isfile(path)][:1]
+    def _find_requirement_file(self, item_path, requirement_path):
+        path = os.path.join(item_path, requirement_path)
+        return path if os.path.isfile(path) else None
 
-    def _normalize_requirements(self, project_id, item_path, file_path):
+    def _normalize_requirements(self, project_id, file_path):
         try:
             with open(file_path, "r", encoding="utf-8") as source:
                 payload = json.load(source)
         except (OSError, json.JSONDecodeError):
             return []
 
-        if isinstance(payload, dict):
-            groups = [payload]
-        elif isinstance(payload, list):
-            groups = payload
-        else:
-            return []
-
-        normalized = []
-        default_module = os.path.basename(os.path.dirname(file_path))
-        for group_index, group in enumerate(groups):
-            if not isinstance(group, dict):
-                continue
-            if isinstance(group.get("requirements"), list):
-                module = group.get("module", "")
-                requirements = group["requirements"]
-            else:
-                module = group.get("module", default_module)
-                requirements = [group]
-            for requirement_index, item in enumerate(requirements):
-                if not isinstance(item, dict):
-                    continue
-                requirement = Requirement.from_dict(
-                    item, module=module, project_id=project_id
-                )
-                if not requirement.id:
-                    relative_path = os.path.relpath(file_path, item_path)
-                    key = (
-                        f"uniportal:{project_id}:{relative_path}:"
-                        f"{group_index}:{requirement_index}:{requirement.code}"
-                    )
-                    requirement.id = str(uuid.uuid5(uuid.NAMESPACE_URL, key))
-                normalized.append(requirement.to_dict())
-        return normalized
+        return self.document_validator_adapter.normalize(project_id, payload)
 
     def _build_project(self, portal_project_id, item_id, item_path):
         project_code = item_id
         project_name = self._project_name(item_id, item_path)
+        if not project_name:
+            return None
         return {
             "code": project_code,
             "title": project_name,
             "portal_project_id": portal_project_id,
         }
 
-    def discover_projects(self):
+    def discover_projects(self, requirement_path):
         projects = []
         for current_project_id, item_id, item_path in self._iter_items() or []:
-            if not self._find_requirement_files(item_path):
+            if not self._find_requirement_file(item_path, requirement_path):
                 continue
-            projects.append(self._build_project(current_project_id, item_id, item_path))
+            project = self._build_project(current_project_id, item_id, item_path)
+            if project:
+                projects.append(project)
         return projects
 
-    def list_requirements(self, project_code, module=None, req_type=None, keyword=None):
+    def list_requirements(
+        self, project_code, requirement_path, module=None, req_type=None, keyword=None
+    ):
         item_path = None
         for _, item_id, path in self._iter_items() or []:
             if str(item_id) == str(project_code):
                 item_path = path
                 break
-        if item_path is None or not self._find_requirement_files(item_path):
+        if item_path is None:
             return None
 
-        items = []
-        for file_path in self._find_requirement_files(item_path):
-            items.extend(
-                self._normalize_requirements(str(project_code), item_path, file_path)
-            )
+        file_path = self._find_requirement_file(item_path, requirement_path)
+        if not file_path:
+            return None
+        items = self._normalize_requirements(str(project_code), file_path)
         if module:
             items = [item for item in items if item.get("module") == module]
         if req_type:

@@ -17,10 +17,10 @@ class ProjectStore:
     def list_projects(self, keyword=None):
         projects = self._load_projects()
         if not keyword:
-            return [project.to_dict() for project in projects]
+            return [project.to_dict(include_modules=False) for project in projects]
         keyword_lower = keyword.lower()
         return [
-            project.to_dict()
+            project.to_dict(include_modules=False)
             for project in projects
             if keyword_lower in project.title.lower() or keyword_lower in project.code.lower()
         ]
@@ -48,6 +48,11 @@ class ProjectStore:
             id=project_id,
             code=payload.get("code", ""),
             title=payload.get("title", ""),
+            modules=[
+                str(item)
+                for item in payload.get("modules", [])
+                if str(item).strip()
+            ],
         )
         projects.append(project)
         self._save_projects(projects)
@@ -62,6 +67,7 @@ class ProjectStore:
                     id=project.id,
                     code=payload.get("code", project.code),
                     title=payload.get("title", project.title),
+                    modules=project.modules,
                 )
                 if new_project == project:
                     return True
@@ -79,3 +85,21 @@ class ProjectStore:
             return False
         self._save_projects(filtered)
         return True
+
+    def create_module(self, project_id, name):
+        projects = self._load_projects()
+        module_name = str(name or "").strip()
+        for idx, project in enumerate(projects):
+            if str(project.id) != str(project_id):
+                continue
+            if module_name in project.modules:
+                return None, "duplicate"
+            projects[idx] = Project(
+                id=project.id,
+                code=project.code,
+                title=project.title,
+                modules=[*project.modules, module_name],
+            )
+            self._save_projects(projects)
+            return module_name, None
+        return None, "not_found"

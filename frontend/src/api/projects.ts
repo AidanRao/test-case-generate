@@ -17,6 +17,7 @@ type ProjectDetailResponse = {
   code: string
   title: string
   source: 'local' | 'uniportal'
+  modules?: string[]
   requirements: Array<{
     id: string
     title: string
@@ -61,6 +62,10 @@ export type QualityInfoResponse = {
 
 type DeleteProjectResponse = {
   deleted: boolean
+}
+
+type CreateModuleResponse = {
+  name: string
 }
 
 type UpdateRequirementPayload = {
@@ -194,6 +199,17 @@ const createRequirement = async (projectId: string, payload: CreateRequirementPa
   return response.data
 }
 
+const createModule = async (projectId: string, name: string) => {
+  const response = await requestJson<CreateModuleResponse>(
+    `/projects/${projectId}/modules`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ name })
+    }
+  )
+  return response.data
+}
+
 const updateProject = async (projectId: string, payload: { code: string; title: string }) => {
   const response = await requestJson<{ updated: boolean }>(
     `/projects/${projectId}`,
@@ -221,6 +237,7 @@ export {
   updateRequirement,
   deleteRequirement,
   createRequirement,
+  createModule,
   updateTestcase,
   deleteTestcase,
   exportTestcasesExcel

@@ -1,33 +1,38 @@
-import os
 from copy import deepcopy
 
 
 class SystemTaskStore:
-    def __init__(self, io, file_path, defaults):
+    def __init__(self, io, file_path):
         self.io = io
         self.file_path = file_path
-        self.defaults = deepcopy(defaults)
-        self._ensure_defaults()
-
-    def _ensure_defaults(self):
-        state = self.io.load(self.file_path, {"tasks": []})
-        tasks = state.get("tasks", []) if isinstance(state, dict) else []
-        normalized = [item for item in tasks if isinstance(item, dict) and item.get("id")]
-        known_ids = {item["id"] for item in normalized}
-        for default in self.defaults:
-            if default["id"] not in known_ids:
-                normalized.append(deepcopy(default))
-        if normalized != tasks or not os.path.exists(self.file_path):
-            self.io.save(self.file_path, {"tasks": normalized})
 
     def list_tasks(self):
-        self._ensure_defaults()
-        state = self.io.load(self.file_path, {"tasks": []})
+        tasks = self.io.load(self.file_path, [])
         return [
             deepcopy(item)
-            for item in state.get("tasks", [])
+            for item in tasks
             if isinstance(item, dict) and item.get("id")
         ]
+
+    def sync_registered_tasks(self, registered_tasks, overrides=None):
+        overrides = overrides or {}
+        tasks = self.list_tasks()
+        known_ids = {item["id"] for item in tasks}
+        changed = False
+        tasks_by_id = {item["id"]: item for item in tasks}
+        for registered_task in registered_tasks:
+            override = overrides.get(registered_task.id)
+            if registered_task.id in known_ids:
+                task = tasks_by_id[registered_task.id]
+                if "kwargs" not in task:
+                    task["kwargs"] = registered_task.to_store_record(override)["kwargs"]
+                    changed = True
+                continue
+            tasks.append(registered_task.to_store_record(override))
+            known_ids.add(registered_task.id)
+            changed = True
+        if changed:
+            self.io.save(self.file_path, tasks)
 
     def get_task(self, task_id):
         for task in self.list_tasks():
@@ -43,9 +48,12 @@ class SystemTaskStore:
             updated = {
                 **task,
                 "enabled": bool(payload.get("enabled")),
-                "interval_seconds": int(payload.get("interval_seconds")),
+                "interval_seconds": int(
+                    payload.get("interval_seconds", task.get("interval_seconds", 30))
+                ),
+                "kwargs": payload.get("kwargs", task.get("kwargs", {})),
             }
             tasks[index] = updated
-            self.io.save(self.file_path, {"tasks": tasks})
+            self.io.save(self.file_path, tasks)
             return deepcopy(updated)
         return None

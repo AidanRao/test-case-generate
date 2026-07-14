@@ -6,6 +6,7 @@ export interface SystemTask {
   description: string
   enabled: boolean
   interval_seconds: number
+  kwargs: Record<string, unknown>
   available: boolean
   running: boolean
 }
@@ -17,7 +18,7 @@ const getSystemTasks = async () => {
 
 const updateSystemTask = async (
   taskId: string,
-  payload: { enabled: boolean; interval_seconds: number }
+  payload: { enabled: boolean; interval_seconds: number; kwargs: Record<string, unknown> }
 ) => {
   const response = await requestJson<SystemTask>(`/system/tasks/${taskId}`, {
     method: 'PUT',
