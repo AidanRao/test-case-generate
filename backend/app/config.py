@@ -1,5 +1,9 @@
 import json
+import logging
 import os
+
+
+logger = logging.getLogger(__name__)
 
 
 class AppConfig:
@@ -12,13 +16,37 @@ class AppConfig:
         self.ai_base_url = ""
         self.ai_api_key = ""
         config_path = os.path.join(base_dir, "config.json")
-        if os.path.exists(config_path):
-            with open(config_path, "r", encoding="utf-8") as f:
-                config = json.load(f)
-            self.ai_model = config.get("model_name", "")
-            self.ai_base_url = config.get("url", "")
-            self.ai_api_key = config.get("api_key", "")
+        config = self._load_config(config_path)
+        self.ai_model = config.get("model_name", "")
+        self.ai_base_url = config.get("url", "")
+        self.ai_api_key = config.get("api_key", "")
         if not self.ai_model:
             self.ai_model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
         if not self.ai_api_key:
             self.ai_api_key = os.environ.get("OPENAI_API_KEY", "")
+
+    @staticmethod
+    def _load_config(config_path):
+        try:
+            with open(config_path, "r", encoding="utf-8") as config_file:
+                config = json.load(config_file)
+        except FileNotFoundError:
+            return {}
+        except (OSError, UnicodeError, json.JSONDecodeError) as error:
+            logger.warning(
+                "Unable to read config file %s; using environment variables and "
+                "defaults instead: %s",
+                config_path,
+                error,
+            )
+            return {}
+
+        if not isinstance(config, dict):
+            logger.warning(
+                "Config file %s must contain a JSON object; using environment "
+                "variables and defaults instead",
+                config_path,
+            )
+            return {}
+
+        return config
