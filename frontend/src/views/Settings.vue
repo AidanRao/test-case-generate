@@ -80,13 +80,17 @@
                 </span>
                 <span v-else-if="testResult === 'success'" class="flex items-center gap-2">
                   <el-icon class="h-4 w-4 text-emerald-500"><CircleCheck /></el-icon>
-                  连接成功
+                  两端连接成功
+                </span>
+                <span v-else-if="testResult === 'partial'" class="flex items-center gap-2">
+                  <el-icon class="h-4 w-4 text-amber-500"><Warning /></el-icon>
+                  部分连接失败
                 </span>
                 <span v-else-if="testResult === 'error'" class="flex items-center gap-2">
                   <el-icon class="h-4 w-4 text-rose-500"><CircleClose /></el-icon>
-                  连接失败
+                  两端连接失败
                 </span>
-                <span v-else>测试连接</span>
+                <span v-else>测试前端与后端连接</span>
               </button>
               <button
                 class="rounded-xl border border-slate-200 px-6 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
@@ -110,6 +114,97 @@
           </template>
         </div>
       </div>
+
+      <el-dialog
+        v-model="resultDialogVisible"
+        title="LLM API 测试结果"
+        width="min(760px, 92vw)"
+        :close-on-click-modal="!testing"
+      >
+        <p class="mb-5 text-sm text-slate-500">
+          两项测试使用相同配置。前端测试由浏览器直连 LLM，后端测试由应用服务器发起请求。
+        </p>
+
+        <div class="grid gap-4 md:grid-cols-2">
+          <div class="rounded-2xl border border-slate-200 bg-slate-50/70 p-5">
+            <div class="mb-4 flex items-center justify-between gap-3">
+              <div class="flex items-center gap-3">
+                <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-100">
+                  <el-icon class="text-indigo-600"><Monitor /></el-icon>
+                </div>
+                <div>
+                  <h3 class="text-sm font-semibold text-slate-900">前端测试</h3>
+                  <p class="text-xs text-slate-500">浏览器 → LLM API</p>
+                </div>
+              </div>
+              <span :class="resultBadgeClass(frontendTestResult)">
+                {{ resultStatusText(frontendTestResult) }}
+              </span>
+            </div>
+            <div v-if="!frontendTestResult" class="flex items-center gap-2 py-6 text-sm text-slate-500">
+              <el-spinner class="h-4 w-4" /> 正在测试前端连接...
+            </div>
+            <div v-else class="space-y-3 text-sm">
+              <div class="grid grid-cols-2 gap-3">
+                <div class="rounded-xl bg-white p-3">
+                  <p class="text-xs text-slate-400">HTTP 状态</p>
+                  <p class="mt-1 font-semibold text-slate-700">{{ frontendTestResult.status_code ?? '—' }}</p>
+                </div>
+                <div class="rounded-xl bg-white p-3">
+                  <p class="text-xs text-slate-400">耗时</p>
+                  <p class="mt-1 font-semibold text-slate-700">{{ frontendTestResult.duration_ms }} ms</p>
+                </div>
+              </div>
+              <p class="font-medium text-slate-700">{{ frontendTestResult.message }}</p>
+              <pre v-if="frontendTestResult.detail" class="max-h-36 overflow-auto whitespace-pre-wrap break-all rounded-xl bg-slate-900 p-3 text-xs leading-relaxed text-slate-200">{{ frontendTestResult.detail }}</pre>
+            </div>
+          </div>
+
+          <div class="rounded-2xl border border-slate-200 bg-slate-50/70 p-5">
+            <div class="mb-4 flex items-center justify-between gap-3">
+              <div class="flex items-center gap-3">
+                <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-100">
+                  <el-icon class="text-sky-600"><DataLine /></el-icon>
+                </div>
+                <div>
+                  <h3 class="text-sm font-semibold text-slate-900">后端测试</h3>
+                  <p class="text-xs text-slate-500">应用服务器 → LLM API</p>
+                </div>
+              </div>
+              <span :class="resultBadgeClass(backendTestResult)">
+                {{ resultStatusText(backendTestResult) }}
+              </span>
+            </div>
+            <div v-if="!backendTestResult" class="flex items-center gap-2 py-6 text-sm text-slate-500">
+              <el-spinner class="h-4 w-4" /> 正在测试后端连接...
+            </div>
+            <div v-else class="space-y-3 text-sm">
+              <div class="grid grid-cols-2 gap-3">
+                <div class="rounded-xl bg-white p-3">
+                  <p class="text-xs text-slate-400">HTTP 状态</p>
+                  <p class="mt-1 font-semibold text-slate-700">{{ backendTestResult.status_code ?? '—' }}</p>
+                </div>
+                <div class="rounded-xl bg-white p-3">
+                  <p class="text-xs text-slate-400">耗时</p>
+                  <p class="mt-1 font-semibold text-slate-700">{{ backendTestResult.duration_ms }} ms</p>
+                </div>
+              </div>
+              <p class="font-medium text-slate-700">{{ backendTestResult.message }}</p>
+              <pre v-if="backendTestResult.detail" class="max-h-36 overflow-auto whitespace-pre-wrap break-all rounded-xl bg-slate-900 p-3 text-xs leading-relaxed text-slate-200">{{ backendTestResult.detail }}</pre>
+            </div>
+          </div>
+        </div>
+
+        <template #footer>
+          <button
+            class="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+            :disabled="testing"
+            @click="resultDialogVisible = false"
+          >
+            {{ testing ? '测试中...' : '关闭' }}
+          </button>
+        </template>
+      </el-dialog>
 
       <div class="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div class="border-b border-slate-100 px-6 py-4">
@@ -219,9 +314,14 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, Setting, CircleCheck, CircleClose, Timer } from '@element-plus/icons-vue'
+import { ArrowLeft, Setting, CircleCheck, CircleClose, Timer, Warning, Monitor, DataLine } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { getConfig, saveConfig } from '../api/aiConfig'
+import {
+  getConfig,
+  saveConfig,
+  testBackendConnection,
+  type ConnectionTestResult
+} from '../api/aiConfig'
 import { getSystemTasks, runSystemTask, updateSystemTask, type SystemTask } from '../api/systemTasks'
 
 const router = useRouter()
@@ -243,7 +343,10 @@ const form = reactive({
 })
 
 const testing = ref(false)
-const testResult = ref<'success' | 'error' | null>(null)
+const testResult = ref<'success' | 'partial' | 'error' | null>(null)
+const resultDialogVisible = ref(false)
+const frontendTestResult = ref<ConnectionTestResult | null>(null)
+const backendTestResult = ref<ConnectionTestResult | null>(null)
 
 const loadConfig = async () => {
   loading.value = true
@@ -376,48 +479,101 @@ const goBack = () => {
   })
 }
 
+const resultStatusText = (result: ConnectionTestResult | null) => {
+  if (!result) return '检测中'
+  return result.success ? '成功' : '失败'
+}
+
+const resultBadgeClass = (result: ConnectionTestResult | null) => [
+  'rounded-full px-2.5 py-1 text-xs font-semibold',
+  !result
+    ? 'bg-slate-200 text-slate-500'
+    : result.success
+      ? 'bg-emerald-100 text-emerald-700'
+      : 'bg-rose-100 text-rose-700'
+]
+
+const runFrontendTest = async (payload: { api_key: string; base_url: string; model: string }) => {
+  const startedAt = performance.now()
+  try {
+    const response = await fetch(`${payload.base_url.replace(/\/$/, '')}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(payload.api_key && { 'Authorization': `Bearer ${payload.api_key}` })
+      },
+      body: JSON.stringify({
+        model: payload.model,
+        messages: [{ role: 'user', content: 'ping' }],
+        max_tokens: 1
+      }),
+      signal: AbortSignal.timeout(10000)
+    })
+    const responseText = (await response.text()).slice(0, 2000)
+    return {
+      success: response.ok,
+      status_code: response.status,
+      duration_ms: Math.round(performance.now() - startedAt),
+      message: response.ok ? '前端连接成功' : `LLM API 返回 HTTP ${response.status}`,
+      detail: responseText
+    } satisfies ConnectionTestResult
+  } catch (error) {
+    return {
+      success: false,
+      status_code: null,
+      duration_ms: Math.round(performance.now() - startedAt),
+      message: '浏览器无法连接 LLM API',
+      detail: error instanceof Error ? error.message : String(error)
+    } satisfies ConnectionTestResult
+  }
+}
+
+const runBackendTest = async (payload: { api_key: string; base_url: string; model: string }) => {
+  const startedAt = performance.now()
+  try {
+    return await testBackendConnection(payload)
+  } catch (error) {
+    return {
+      success: false,
+      status_code: null,
+      duration_ms: Math.round(performance.now() - startedAt),
+      message: '无法发起后端测试',
+      detail: error instanceof Error ? error.message : String(error)
+    } satisfies ConnectionTestResult
+  }
+}
+
 const testConnection = async () => {
   if (!form.baseUrl.trim()) {
     ElMessage.warning('请输入 Base URL')
     return
   }
 
+  const payload = {
+    api_key: form.apiKey.trim(),
+    base_url: form.baseUrl.trim(),
+    model: form.model.trim() || 'qwen3-max'
+  }
+
   testing.value = true
   testResult.value = null
+  frontendTestResult.value = null
+  backendTestResult.value = null
+  resultDialogVisible.value = true
 
-  try {
-    const baseUrl = form.baseUrl.trim()
-    const apiKey = form.apiKey.trim()
-    const model = form.model.trim() || 'qwen3-max'
+  const frontendPromise = runFrontendTest(payload).then((result) => {
+    frontendTestResult.value = result
+    return result
+  })
+  const backendPromise = runBackendTest(payload).then((result) => {
+    backendTestResult.value = result
+    return result
+  })
 
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(apiKey && { 'Authorization': `Bearer ${apiKey}` })
-      },
-      body: JSON.stringify({
-        model: model,
-        messages: [{ role: 'user', content: 'ping' }],
-        max_tokens: 1
-      }),
-      signal: AbortSignal.timeout(10000)
-    })
-
-    if (response.ok) {
-      testResult.value = 'success'
-      ElMessage.success('连接成功！')
-    } else {
-      testResult.value = 'error'
-      const errorText = await response.text()
-      ElMessage.error(`连接失败: ${response.status} - ${errorText}`)
-    }
-  } catch (error) {
-    testResult.value = 'error'
-    ElMessage.error(`连接失败: ${(error as Error).message}`)
-  } finally {
-    testing.value = false
-  }
+  const [frontendResult, backendResult] = await Promise.all([frontendPromise, backendPromise])
+  const successCount = [frontendResult, backendResult].filter((result) => result.success).length
+  testResult.value = successCount === 2 ? 'success' : successCount === 1 ? 'partial' : 'error'
+  testing.value = false
 }
 
 onMounted(() => {
