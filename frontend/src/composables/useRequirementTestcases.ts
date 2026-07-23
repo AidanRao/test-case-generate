@@ -1,5 +1,5 @@
-import type { RequirementTestCaseItem } from '../components/RequirementDetailDialog.vue'
 import type { ModuleGroup, Requirement } from '../data/projectStore'
+import type { RequirementTestCaseItem } from '../data/testcase'
 
 export type RequirementWithTestcases = Omit<Requirement, 'module'> & {
   module?: string
@@ -65,6 +65,7 @@ export const buildTestcases = (
       title: `${requirement.title}-测试点${index + 1}`,
       code: `TC-${baseCode}-${String(index + 1).padStart(3, '0')}`,
       type: '功能测试',
+      scenario_type: '正常流程用例',
       test_steps: [
         {
           step_desc: fragment,

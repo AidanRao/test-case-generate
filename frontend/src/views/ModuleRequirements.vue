@@ -13,7 +13,7 @@
           :model-value="moduleName"
           :project-name="projectName"
           :modules="moduleOptions"
-          :can-create="!isReadOnlyProject"
+          :can-create="!isReadOnlyProject && !isGenerationActive"
           @select="selectModule"
           @create="openCreateModule"
         />
@@ -23,9 +23,9 @@
           </span>
           <button
             class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold transition"
-            :class="isReadOnlyProject ? 'cursor-not-allowed bg-slate-100 text-slate-400' : 'bg-sky-600 text-white hover:bg-sky-700'"
+            :class="isReadOnlyProject || isGenerationActive ? 'cursor-not-allowed bg-slate-100 text-slate-400' : 'bg-sky-600 text-white hover:bg-sky-700'"
             type="button"
-            :disabled="isReadOnlyProject"
+            :disabled="isReadOnlyProject || isGenerationActive"
             @click="openCreateDialog"
           >
             <el-icon><Plus /></el-icon>
@@ -106,7 +106,7 @@
                 <td class="px-4 py-5">
                   <span
                     class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold"
-                    :class="getTestcaseCount(item) > 0 ? 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20' : 'bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20'"
+                    :class="isRequirementGenerating(item) ? 'bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20' : getTestcaseCount(item) > 0 ? 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20' : 'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-500/10'"
                   >
                     {{ formatTestcaseCount(item) }}
                   </span>
@@ -122,9 +122,9 @@
                     </button>
                     <button
                       class="rounded-full border px-3 py-1 text-xs font-semibold transition"
-                      :class="isReadOnlyProject ? 'cursor-not-allowed border-slate-100 text-slate-300' : 'border-rose-200 text-rose-600 hover:border-rose-300 hover:bg-rose-50'"
+                      :class="isReadOnlyProject || isGenerationActive ? 'cursor-not-allowed border-slate-100 text-slate-300' : 'border-rose-200 text-rose-600 hover:border-rose-300 hover:bg-rose-50'"
                       type="button"
-                      :disabled="isReadOnlyProject"
+                      :disabled="isReadOnlyProject || isGenerationActive"
                       @click="confirmDeleteRequirement(item)"
                     >
                       删除
@@ -166,8 +166,9 @@
       v-model="detailVisible"
       :requirement="detailRequirement"
       :testcases="detailTestcases"
-      :is-generating="false"
-      :read-only="isReadOnlyProject"
+      :is-generating="detailRequirementGenerating"
+      :generation-disabled="isGenerationActive"
+      :read-only="isReadOnlyProject || isGenerationActive"
       @open-testcase="openTestcaseDetail"
       @save="handleRequirementSave"
       @delete="handleRequirementDelete"
@@ -177,6 +178,7 @@
     <TestCaseDetailDialog
       v-model="testcaseDetailVisible"
       :testcase="testcaseDetail"
+      :read-only="isGenerationActive"
       @save="handleTestcaseSave"
       @delete="handleTestcaseDelete"
     />
@@ -195,7 +197,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft, Plus } from '@element-plus/icons-vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
@@ -204,28 +206,19 @@ import CreateRequirementDialog from '../components/CreateRequirementDialog.vue'
 import ModuleSelectDropdown from '../components/ModuleSelectDropdown.vue'
 import PaginationBar from '../components/PaginationBar.vue'
 import RequirementDetailDialog from '../components/RequirementDetailDialog.vue'
-import type { RequirementDetailItem, RequirementTestCaseItem } from '../components/RequirementDetailDialog.vue'
+import type { RequirementDetailItem } from '../components/RequirementDetailDialog.vue'
 import TestCaseDetailDialog from '../components/TestCaseDetailDialog.vue'
-import type { TestCaseDetailItem } from '../components/TestCaseDetailDialog.vue'
+import type { RequirementTestCaseItem, TestCaseDetailItem } from '../data/testcase'
 import { useConfirmDialog } from '../composables/useConfirmDialog'
-import { useProjectDetail } from '../composables/useProjectDetail'
+import { useProjectTestcaseWorkspace } from '../composables/useProjectTestcaseWorkspace'
 import {
   buildTestcases,
   getRequirementIdentity,
   isSameRequirement,
   type RequirementWithTestcases
 } from '../composables/useRequirementTestcases'
-import {
-  createModule,
-  createRequirement,
-  deleteRequirement,
-  deleteTestcase,
-  generateTestcasesAsync,
-  updateRequirement,
-  updateTestcase
-} from '../api/projects'
 import type { CreateRequirementPayload } from '../api/projects'
-import { loadProjects, saveProjects, type Requirement } from '../data/projectStore'
+import type { Requirement } from '../data/projectStore'
 
 type PageRequirement = RequirementWithTestcases & { module: string }
 
@@ -236,14 +229,25 @@ const projectId = computed(() => String(route.params.projectId ?? ''))
 const moduleName = computed(() => String(route.params.moduleName ?? ''))
 
 const {
-  localProjects,
   moduleGroups,
   projectName,
   isReadOnlyProject,
   isLoading,
   loadError,
-  loadProjectDetail
-} = useProjectDetail({ projectId })
+  activeRequirementIds,
+  isGenerationActive,
+  submitGeneration,
+  saveRequirement,
+  removeRequirement,
+  addRequirement,
+  addModule,
+  saveTestcase,
+  removeTestcase,
+  createLocalRequirement,
+  createLocalModule,
+  deleteLocalRequirement,
+  updateLocalRequirement
+} = useProjectTestcaseWorkspace({ projectId })
 
 const createRequirementVisible = ref(false)
 const createModuleVisible = ref(false)
@@ -254,6 +258,10 @@ const testcaseDetail = ref<TestCaseDetailItem | null>(null)
 const testcaseDetailVisible = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(5)
+const detailRequirementGenerating = computed(() => {
+  const requirementId = getRequirementIdentity(detailRequirement.value)
+  return Boolean(requirementId && activeRequirementIds.value.has(requirementId))
+})
 
 const {
   confirmVisible,
@@ -298,12 +306,20 @@ const getRequirementKey = (item: Requirement, index: number) =>
 
 const getTestcaseCount = (item: PageRequirement) => buildTestcases(item).length
 
+const isRequirementGenerating = (item: PageRequirement) =>
+  activeRequirementIds.value.has(getRequirementIdentity(item))
+
 const formatTestcaseCount = (item: PageRequirement) => {
+  if (isRequirementGenerating(item)) return '生成中'
   const count = getTestcaseCount(item)
   return count > 0 ? `${count} 条` : '未生成'
 }
 
 const openCreateDialog = () => {
+  if (isGenerationActive.value) {
+    window.alert('测试用例生成期间不能新增需求')
+    return
+  }
   if (isReadOnlyProject.value) {
     window.alert('UniPortal 来源需求为只读，请在 UniPortal 中管理')
     return
@@ -326,7 +342,7 @@ const selectModule = (nextModuleName: string) => {
 }
 
 const openCreateModule = () => {
-  if (isReadOnlyProject.value) {
+  if (isReadOnlyProject.value || isGenerationActive.value) {
     return
   }
   createModuleVisible.value = true
@@ -343,178 +359,21 @@ const openTestcaseDetail = (item: TestCaseDetailItem) => {
   testcaseDetailVisible.value = true
 }
 
-const createLocalRequirement = (payload: CreateRequirementPayload) => {
-  const projects = loadProjects()
-  const targetProject = projects.find((item) => item.id === projectId.value)
-  if (!targetProject) {
-    window.alert('未找到项目，无法新增需求')
-    return false
+const refreshOpenRequirementTestcases = (requirementIdentity: string, testcaseId?: string) => {
+  const refreshedRequirement = moduleRequirements.value.find(
+    (item) => getRequirementIdentity(item) === requirementIdentity
+  ) ?? null
+  if (!refreshedRequirement) {
+    return
   }
 
-  const nextRequirement = {
-    ID: `local-req-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
-    code: payload.code,
-    title: payload.title,
-    type: payload.type,
-    content: payload.content
+  detailRequirement.value = refreshedRequirement
+  detailTestcases.value = buildTestcases(refreshedRequirement)
+  if (testcaseId) {
+    testcaseDetail.value = detailTestcases.value.find(
+      (item) => String(item.id) === String(testcaseId)
+    ) ?? null
   }
-  const moduleIndex = targetProject.modules.findIndex((item) => item.module === payload.module)
-  const nextModules = targetProject.modules.map((item) => ({
-    ...item,
-    requirements: [...item.requirements]
-  }))
-  const targetModule = moduleIndex >= 0 ? nextModules[moduleIndex] : undefined
-  if (targetModule) {
-    targetModule.requirements.push(nextRequirement)
-  } else {
-    nextModules.push({ module: payload.module, requirements: [nextRequirement] })
-  }
-
-  const updatedProjects = projects.map((item) =>
-    item.id === targetProject.id
-      ? {
-          ...item,
-          modules: nextModules,
-          moduleCount: nextModules.length,
-          requirementCount: nextModules.reduce((sum, group) => sum + group.requirements.length, 0)
-        }
-      : item
-  )
-  saveProjects(updatedProjects)
-  localProjects.value = updatedProjects
-  return true
-}
-
-const createLocalModule = (nextModuleName: string) => {
-  const projects = loadProjects()
-  const targetProject = projects.find((item) => item.id === projectId.value)
-  if (!targetProject) {
-    window.alert('未找到项目，无法新增模块')
-    return false
-  }
-  if (targetProject.modules.some((item) => item.module === nextModuleName)) {
-    window.alert('模块名已存在')
-    return false
-  }
-
-  const nextModules = [
-    ...targetProject.modules.map((item) => ({
-      ...item,
-      requirements: [...item.requirements]
-    })),
-    { module: nextModuleName, requirements: [] }
-  ]
-  const updatedProjects = projects.map((item) =>
-    item.id === targetProject.id
-      ? {
-          ...item,
-          modules: nextModules,
-          moduleCount: nextModules.length,
-          requirementCount: nextModules.reduce((sum, group) => sum + group.requirements.length, 0)
-        }
-      : item
-  )
-  saveProjects(updatedProjects)
-  localProjects.value = updatedProjects
-  return true
-}
-
-const deleteLocalRequirement = (target: PageRequirement) => {
-  const projects = loadProjects()
-  const targetProject = projects.find((item) => item.id === projectId.value)
-  if (!targetProject) {
-    window.alert('未找到项目，无法删除需求')
-    return false
-  }
-
-  let deleted = false
-  const nextModules = targetProject.modules.map((group) => {
-    if (group.module !== moduleName.value) {
-      return { ...group, requirements: [...group.requirements] }
-    }
-    const requirements = group.requirements.filter((item) => {
-      const shouldDelete = isSameRequirement({ ...item, module: group.module }, target)
-      if (shouldDelete) {
-        deleted = true
-      }
-      return !shouldDelete
-    })
-    return { ...group, requirements }
-  })
-
-  if (!deleted) {
-    window.alert('未找到要删除的需求')
-    return false
-  }
-
-  const updatedProjects = projects.map((item) =>
-    item.id === targetProject.id
-      ? {
-          ...item,
-          modules: nextModules,
-          moduleCount: nextModules.length,
-          requirementCount: nextModules.reduce((sum, group) => sum + group.requirements.length, 0)
-        }
-      : item
-  )
-  saveProjects(updatedProjects)
-  localProjects.value = updatedProjects
-  return true
-}
-
-const updateLocalRequirement = (target: PageRequirement, payload: RequirementDetailItem) => {
-  const projects = loadProjects()
-  const targetProject = projects.find((item) => item.id === projectId.value)
-  if (!targetProject) {
-    window.alert('未找到项目，无法修改需求')
-    return false
-  }
-
-  let updated = false
-  const nextModules = targetProject.modules.map((group) => {
-    if (group.module !== moduleName.value) {
-      return { ...group, requirements: [...group.requirements] }
-    }
-    const requirements = group.requirements.map((item) => {
-      if (!isSameRequirement({ ...item, module: group.module }, target)) {
-        return item
-      }
-      updated = true
-      return {
-        ...item,
-        title: payload.title,
-        type: payload.type,
-        content: payload.content,
-        code: payload.code ?? item.code,
-        ID: payload.ID ?? item.ID
-      }
-    })
-    return { ...group, requirements }
-  })
-
-  if (!updated) {
-    window.alert('未找到要修改的需求')
-    return false
-  }
-
-  const updatedProjects = projects.map((item) =>
-    item.id === targetProject.id
-      ? {
-          ...item,
-          modules: nextModules,
-          moduleCount: nextModules.length,
-          requirementCount: nextModules.reduce((sum, group) => sum + group.requirements.length, 0)
-        }
-      : item
-  )
-  saveProjects(updatedProjects)
-  localProjects.value = updatedProjects
-  const nextDetail = moduleRequirements.value.find((item) => isSameRequirement(item, { ...payload, module: moduleName.value }))
-  if (nextDetail) {
-    detailRequirement.value = nextDetail
-    detailTestcases.value = buildTestcases(nextDetail)
-  }
-  return true
 }
 
 const confirmDeleteRequirement = (item: PageRequirement) => {
@@ -528,7 +387,11 @@ const confirmDeleteRequirement = (item: PageRequirement) => {
     cancelText: '取消',
     onConfirm: async () => {
       if (projectId.value.startsWith('local-')) {
-        if (deleteLocalRequirement(item) && detailRequirement.value && isSameRequirement(detailRequirement.value, item)) {
+        if (!deleteLocalRequirement(moduleName.value, item)) {
+          window.alert('未找到要删除的需求')
+          return
+        }
+        if (detailRequirement.value && isSameRequirement(detailRequirement.value, item)) {
           detailVisible.value = false
           detailRequirement.value = null
           detailTestcases.value = []
@@ -542,8 +405,7 @@ const confirmDeleteRequirement = (item: PageRequirement) => {
         return
       }
       try {
-        await deleteRequirement(projectId.value, requirementId)
-        await loadProjectDetail()
+        await removeRequirement(requirementId)
         if (detailRequirement.value && isSameRequirement(detailRequirement.value, item)) {
           detailVisible.value = false
           detailRequirement.value = null
@@ -567,7 +429,17 @@ const handleRequirementSave = async (payload: RequirementDetailItem) => {
   }
 
   if (projectId.value.startsWith('local-')) {
-    updateLocalRequirement(currentRequirement, payload)
+    if (!updateLocalRequirement(moduleName.value, currentRequirement, payload)) {
+      window.alert('未找到要修改的需求')
+      return
+    }
+    const nextDetail = moduleRequirements.value.find((item) =>
+      isSameRequirement(item, { ...payload, module: moduleName.value })
+    )
+    if (nextDetail) {
+      detailRequirement.value = nextDetail
+      detailTestcases.value = buildTestcases(nextDetail)
+    }
     return
   }
 
@@ -577,12 +449,11 @@ const handleRequirementSave = async (payload: RequirementDetailItem) => {
     return
   }
   try {
-    await updateRequirement(projectId.value, requirementId, {
+    await saveRequirement(requirementId, {
       title: payload.title,
       type: payload.type,
       content: payload.content
     })
-    await loadProjectDetail()
     detailRequirement.value = moduleRequirements.value.find((item) => getRequirementIdentity(item) === requirementId) ?? null
     if (detailRequirement.value) {
       detailTestcases.value = buildTestcases(detailRequirement.value)
@@ -593,8 +464,7 @@ const handleRequirementSave = async (payload: RequirementDetailItem) => {
       confirmText: '生成',
       onConfirm: async () => {
         try {
-          await generateTestcasesAsync(projectId.value, [requirementId])
-          await loadProjectDetail()
+          await submitGeneration([requirementId])
         } catch {
           window.alert('测试用例生成任务提交失败，请稍后重试')
         }
@@ -627,8 +497,7 @@ const handleRequirementGenerateTestcases = async () => {
     confirmText: '生成',
     onConfirm: async () => {
       try {
-        await generateTestcasesAsync(projectId.value, [requirementId])
-        await loadProjectDetail()
+        await submitGeneration([requirementId])
       } catch {
         window.alert('测试用例生成任务提交失败，请稍后重试')
       }
@@ -645,16 +514,19 @@ const handleTestcaseSave = async (payload: TestCaseDetailItem) => {
     window.alert('测试用例缺少可用的标识')
     return
   }
+  const requirementIdentity = getRequirementIdentity(detailRequirement.value)
   try {
-    await updateTestcase(projectId.value, payload.id, {
+    await saveTestcase(payload.id, {
       title: payload.title,
       code: payload.code,
       type: payload.type,
+      scenario_type: payload.scenario_type,
+      priority: payload.priority,
       test_steps: payload.test_steps ?? [],
       test_target_desc: payload.test_target_desc,
       verify_method: payload.verify_method
     })
-    await loadProjectDetail()
+    refreshOpenRequirementTestcases(requirementIdentity, payload.id)
     testcaseDetailVisible.value = false
   } catch {
     window.alert('测试用例更新失败，请稍后重试')
@@ -677,8 +549,7 @@ const handleTestcaseDelete = async (payload: TestCaseDetailItem) => {
     cancelText: '取消',
     onConfirm: async () => {
       try {
-        await deleteTestcase(projectId.value, payload.id as string)
-        await loadProjectDetail()
+        await removeTestcase(payload.id as string)
         testcaseDetailVisible.value = false
       } catch {
         window.alert('测试用例删除失败，请稍后重试')
@@ -696,13 +567,14 @@ const handleRequirementCreate = async (payload: CreateRequirementPayload) => {
     if (createLocalRequirement(payload)) {
       createRequirementVisible.value = false
       currentPage.value = Math.max(1, Math.ceil(moduleRequirements.value.length / pageSize.value))
+    } else {
+      window.alert('未找到项目，无法新增需求')
     }
     return
   }
 
   try {
-    const result = await createRequirement(projectId.value, payload)
-    await loadProjectDetail()
+    const result = await addRequirement(payload)
     createRequirementVisible.value = false
     currentPage.value = Math.max(1, Math.ceil(moduleRequirements.value.length / pageSize.value))
     openConfirm({
@@ -713,9 +585,8 @@ const handleRequirementCreate = async (payload: CreateRequirementPayload) => {
         try {
           const requirementId = result.id || result.code
           if (requirementId) {
-            await generateTestcasesAsync(projectId.value, [requirementId])
+            await submitGeneration([requirementId])
           }
-          await loadProjectDetail()
         } catch {
           window.alert('测试用例生成任务提交失败，请稍后重试')
         }
@@ -735,13 +606,14 @@ const handleModuleCreate = async (nextModuleName: string) => {
     if (createLocalModule(nextModuleName)) {
       createModuleVisible.value = false
       selectModule(nextModuleName)
+    } else {
+      window.alert('项目不存在或模块名已存在')
     }
     return
   }
 
   try {
-    const result = await createModule(projectId.value, nextModuleName)
-    await loadProjectDetail()
+    const result = await addModule(nextModuleName)
     createModuleVisible.value = false
     selectModule(result.name || nextModuleName)
   } catch {
@@ -767,11 +639,4 @@ watch(moduleRequirements, () => {
   }
 })
 
-watch(projectId, () => {
-  loadProjectDetail()
-})
-
-onMounted(() => {
-  loadProjectDetail()
-})
 </script>

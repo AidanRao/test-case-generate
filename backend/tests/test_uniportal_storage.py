@@ -181,6 +181,7 @@ class UniPortalStorageTest(unittest.TestCase):
                     "title": "Existing testcase",
                     "code": "TC-001",
                     "type": "Functional",
+                    "scenario_type": "正常流程用例",
                     "test_steps": [],
                 }
             ],
@@ -240,7 +241,14 @@ class UniPortalStorageTest(unittest.TestCase):
         storage.add_testcases(
             project["id"],
             requirement["id"],
-            [{"id": "TC-001", "code": "TC-001", "title": "Existing testcase"}],
+            [
+                {
+                    "id": "TC-001",
+                    "code": "TC-001",
+                    "title": "Existing testcase",
+                    "scenario_type": "正常流程用例",
+                }
+            ],
         )
         os.remove(
             os.path.join(

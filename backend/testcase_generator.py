@@ -3,6 +3,8 @@ import re
 from openai import OpenAI
 from openai.types.chat import ChatCompletionSystemMessageParam, ChatCompletionUserMessageParam
 
+from app.models.testcase import SCENARIO_TYPES, is_valid_scenario_type
+
 
 def _get_type_specific_instruction(req_type):
     """
@@ -29,6 +31,8 @@ def _build_system_prompt(req_type):
     """
     type_instruction = _get_type_specific_instruction(req_type)
 
+    scenario_types = "、".join(f"`{item}`" for item in SCENARIO_TYPES)
+
     return f"""你是一个专业的软件测试工程师。你的任务是根据给定的软件需求描述，编写对应的【{req_type}】用例。
 
 {type_instruction}
@@ -42,6 +46,12 @@ def _build_system_prompt(req_type):
 3. 建议控制在 6~30 个字符内，避免把整段需求原文粘贴进来。
 
 **重要要求：每个测试用例必须包含至少 3 个测试步骤。请详细拆解测试过程，例如包括初始化设置、中间状态检查、触发动作、最终结果验证等。**
+
+**重要要求：每个测试用例必须包含用例场景字段 `scenario_type`。**
+1. `scenario_type` 只能从以下五个值中选择一个：{scenario_types}。
+2. 请结合需求内容，尽量覆盖所有适用的场景类别，包括正常流程、边界条件、异常场景、组合场景和回归测试。
+3. 不要为了凑齐五类而生成与需求无关或不合理的用例；不适用的类别可以不生成。
+4. 每条用例只能归属于一个最主要的场景类别。
 
 **核心规则：变量识别与命名**
 在编写 `step_desc`（测试步骤描述）时，**严禁**只使用纯自然语言描述。
@@ -63,6 +73,7 @@ JSON 对象结构如下：
 "test_target_desc": "测试目标描述",
 "requirement_id": "REG-[需求ID]",
 "test_case_type": "{req_type}",
+"scenario_type": "正常流程用例",
 "verify_method": "TESTING",
 "test_steps": [
 {{
@@ -154,11 +165,19 @@ class TestCaseGenerator:
             final_result = []
             if isinstance(result, list):
                 for tc in result:
+                    if not isinstance(tc, dict) or not is_valid_scenario_type(
+                        tc.get("scenario_type")
+                    ):
+                        raise ValueError("测试用例缺少合法的 scenario_type")
                     tc['test_case_type'] = req_type
                     final_result.append(tc)
             elif isinstance(result, dict):
+                if not is_valid_scenario_type(result.get("scenario_type")):
+                    raise ValueError("测试用例缺少合法的 scenario_type")
                 result['test_case_type'] = req_type
                 final_result.append(result)
+            else:
+                raise ValueError("测试用例响应必须是 JSON 对象或列表")
                  
             return final_result
         except json.JSONDecodeError:

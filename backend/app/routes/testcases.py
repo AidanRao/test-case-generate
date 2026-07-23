@@ -1,5 +1,4 @@
 from flask import Blueprint, current_app, request, send_file, after_this_request, jsonify
-from threading import Thread
 import time
 import os
 import tempfile
@@ -7,129 +6,92 @@ import random
 
 from app.services.project_service import ProjectService
 from app.services.testcase_service import TestCaseService
+from app.models.testcase import DEFAULT_PRIORITY, is_valid_priority, is_valid_scenario_type
+from app.utils.generation_guard import reject_while_testcases_are_generating
 from app.utils.ids import new_uuid
 from app.utils.responses import error, ok
 
 testcases_bp = Blueprint("testcases", __name__)
 
 
-@testcases_bp.post("/projects/<project_id>/testcases/generate")
-def generate_testcases(project_id):
+@testcases_bp.post("/projects/<project_id>/testcase-generation-jobs")
+def create_testcase_generation_job(project_id):
     payload = request.get_json(silent=True) or {}
     storage = current_app.config["STORAGE"]
-    requirement_ids = payload.get("requirement_ids")
-    replace = bool(payload.get("replace"))
-    ai_config = payload.get("ai_config")
-    if not requirement_ids:
-        requirements = storage.list_requirements(project_id) or []
-        requirement_ids = [item.get("id") for item in requirements]
-    config = current_app.config["APP_CONFIG"]
-    service = TestCaseService(storage, config)
-    results, err = service.generate_testcases(project_id, requirement_ids, replace=replace, ai_config=ai_config)
-    if err == "missing_api_key":
-        return error(50001, "未配置 OpenAI API Key", 500)
-    if err == "requirement_not_found":
+    project = storage.get_project(project_id)
+    if not project:
         return error(40401, "资源不存在", 404)
-    if err == "generation_failed":
-        return error(50001, "生成失败", 500)
-    return ok({"list": results})
 
+    requirements = storage.list_requirements(project_id) or []
+    requirements_by_id = {
+        str(item["id"]): item for item in requirements if item.get("id")
+    }
+    all_requirement_ids = [
+        str(item["id"]) for item in requirements if item.get("id")
+    ]
+    available_requirement_ids = set(all_requirement_ids)
+    requested_requirement_ids = payload.get("requirement_ids")
+    if requested_requirement_ids is None:
+        requirement_ids = all_requirement_ids
+    elif isinstance(requested_requirement_ids, list):
+        if not all(
+            isinstance(item, str) and item.strip()
+            for item in requested_requirement_ids
+        ):
+            return error(40001, "requirement_ids 只能包含非空字符串", 400)
+        requirement_ids = list(
+            dict.fromkeys(
+                item.strip() for item in requested_requirement_ids
+            )
+        )
+    else:
+        return error(40001, "requirement_ids 必须是数组", 400)
 
-@testcases_bp.post("/projects/<project_id>/testcases/generate/async")
-def generate_testcases_async(project_id):
-    payload = request.get_json(silent=True) or {}
-    storage = current_app.config["STORAGE"]
-    requirement_ids = payload.get("requirement_ids")
+    if not requirement_ids:
+        return error(40001, "没有可生成测试用例的需求", 400)
+    if any(
+        requirement_id not in available_requirement_ids
+        for requirement_id in requirement_ids
+    ):
+        return error(40401, "需求不存在", 404)
+
     replace = bool(payload.get("replace"))
     ai_config = payload.get("ai_config")
-    if not requirement_ids:
-        requirements = storage.list_requirements(project_id) or []
-        requirement_ids = [item.get("id") for item in requirements]
-    config = current_app.config["APP_CONFIG"]
-    jobs_state = current_app.config["TESTCASE_JOBS"]
-    job_id = new_uuid()
-    if replace:
-        for requirement_id in requirement_ids:
-            storage.delete_testcases_by_requirement(project_id, requirement_id)
-        replace = False
-    with jobs_state["lock"]:
-        jobs_state["jobs"][job_id] = {
-            "project_id": str(project_id),
-            "status": "pending",
-            "result": None,
-            "error": None,
-            "created_at": time.time(),
-        }
-
-    def _run():
-        with jobs_state["lock"]:
-            job = jobs_state["jobs"].get(job_id)
-            if not job:
-                return
-            job["status"] = "running"
-        try:
-            service = TestCaseService(storage, config)
-            results, err = service.generate_testcases(
-                project_id, requirement_ids, replace=replace, ai_config=ai_config
-            )
-        except Exception as exc:
-            with jobs_state["lock"]:
-                job = jobs_state["jobs"].get(job_id)
-                if not job:
-                    return
-                job["status"] = "error"
-                job["error"] = f"internal_error:{exc.__class__.__name__}"
-            return
-        with jobs_state["lock"]:
-            job = jobs_state["jobs"].get(job_id)
-            if not job:
-                return
-            if err:
-                job["status"] = "error"
-                job["error"] = err
-            else:
-                job["status"] = "done"
-                job["result"] = results
-
-    Thread(target=_run, daemon=True).start()
-    return ok({"job_id": job_id})
+    manager = current_app.extensions["testcase_job_manager"]
+    job, active_job = manager.submit(
+        project_id,
+        [requirements_by_id[requirement_id] for requirement_id in requirement_ids],
+        replace=replace,
+        ai_config=ai_config,
+    )
+    if active_job:
+        return error(
+            40901,
+            "该项目已有测试用例生成任务正在进行",
+            409,
+            active_job,
+        )
+    response = ok(job)
+    response.status_code = 202
+    return response
 
 
-@testcases_bp.get("/projects/<project_id>/testcases/generate/async/<job_id>")
-def get_async_job(project_id, job_id):
-    jobs_state = current_app.config["TESTCASE_JOBS"]
-    with jobs_state["lock"]:
-        job = jobs_state["jobs"].get(job_id)
-        if not job or str(job.get("project_id")) != str(project_id):
-            return error(40401, "资源不存在", 404)
-        data = {
-            "job_id": job_id,
-            "status": job.get("status"),
-        }
-        if job.get("status") == "error":
-            data["error"] = job.get("error")
-        return ok(data)
+@testcases_bp.get("/projects/<project_id>/testcase-generation-jobs/<job_id>")
+def get_testcase_generation_job(project_id, job_id):
+    manager = current_app.extensions["testcase_job_manager"]
+    job = manager.get_job(job_id)
+    if not job or str(job["project_id"]) != str(project_id):
+        return error(40401, "资源不存在", 404)
+    return ok(job)
 
 
-@testcases_bp.get("/projects/<project_id>/testcases/generate/async")
-def get_async_job_by_project(project_id):
-    jobs_state = current_app.config["TESTCASE_JOBS"]
-    with jobs_state["lock"]:
-        matched = [
-            (job_id, job)
-            for job_id, job in jobs_state["jobs"].items()
-            if str(job.get("project_id")) == str(project_id)
-        ]
-        if not matched:
-            return ok({"status": "idle"})
-        job_id, job = max(matched, key=lambda item: item[1].get("created_at", 0))
-        data = {
-            "job_id": job_id,
-            "status": job.get("status"),
-        }
-        if job.get("status") == "error":
-            data["error"] = job.get("error")
-        return ok(data)
+@testcases_bp.get("/projects/<project_id>/testcase-generation-jobs")
+def get_project_testcase_generation_status(project_id):
+    storage = current_app.config["STORAGE"]
+    if not storage.get_project(project_id):
+        return error(40401, "资源不存在", 404)
+    manager = current_app.extensions["testcase_job_manager"]
+    return ok(manager.get_project_status(project_id))
 
 
 @testcases_bp.get("/projects/<project_id>/requirements/<requirement_id>/testcases")
@@ -142,8 +104,13 @@ def list_testcases(project_id, requirement_id):
 
 
 @testcases_bp.put("/projects/<project_id>/testcases/<testcase_id>")
+@reject_while_testcases_are_generating
 def update_testcase(project_id, testcase_id):
     payload = request.get_json(silent=True) or {}
+    if not is_valid_scenario_type(payload.get("scenario_type")):
+        return error(40001, "scenario_type 参数不合法", 400)
+    if "priority" in payload and not is_valid_priority(payload.get("priority")):
+        return error(40001, "priority 参数不合法", 400)
     storage = current_app.config["STORAGE"]
     config = current_app.config["APP_CONFIG"]
     service = TestCaseService(storage, config)
@@ -154,6 +121,7 @@ def update_testcase(project_id, testcase_id):
 
 
 @testcases_bp.delete("/projects/<project_id>/testcases/<testcase_id>")
+@reject_while_testcases_are_generating
 def delete_testcase(project_id, testcase_id):
     storage = current_app.config["STORAGE"]
     config = current_app.config["APP_CONFIG"]
@@ -256,6 +224,8 @@ def _render_testcases_md(testcases, requirements_by_id):
         for tc in sorted(items, key=lambda x: str(x.get("code") or "")):
             lines.append(f"## {tc.get('code') or ''} {tc.get('title') or ''}".strip())
             lines.append(f"- 测试用例类型：{tc.get('type') or ''}".strip())
+            lines.append(f"- 用例场景：{tc.get('scenario_type') or ''}".strip())
+            lines.append(f"- 优先级：{tc.get('priority') or DEFAULT_PRIORITY}".strip())
             if tc.get("verify_method"):
                 lines.append(f"- 验证方法：{tc.get('verify_method')}")
             if tc.get("test_target_desc"):
@@ -333,6 +303,9 @@ def integration_generate_testcases():
             if raw_cases is None:
                 fail_count += 1
                 continue
+            if not service.has_valid_scenarios(raw_cases):
+                fail_count += 1
+                continue
             mapped = service._map_cases(project_id, req, raw_cases)
             storage.add_testcases(project_id, req_id, mapped)
             results.extend(mapped)
@@ -353,6 +326,9 @@ def integration_generate_testcases():
             if raw_cases is None:
                 fail_count += 1
                 continue
+            if not service.has_valid_scenarios(raw_cases):
+                fail_count += 1
+                continue
             for case in raw_cases:
                 seq = str(base_seq).zfill(3)
                 base_seq += 1
@@ -365,6 +341,8 @@ def integration_generate_testcases():
                         "title": case_title,
                         "code": f"TC-{project_code}-{seq}",
                         "type": case.get("test_case_type") or "功能测试",
+                        "scenario_type": case["scenario_type"],
+                        "priority": DEFAULT_PRIORITY,
                         "test_steps": case.get("test_steps", []),
                         "test_target_desc": case.get("test_target_desc", ""),
                         "verify_method": case.get("verify_method", "TESTING"),

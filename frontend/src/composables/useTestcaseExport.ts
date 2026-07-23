@@ -1,6 +1,6 @@
 import { ref, type ComputedRef } from 'vue'
 import type { ModuleGroup, Requirement } from '../data/projectStore'
-import type { RequirementTestCaseItem } from '../components/RequirementDetailDialog.vue'
+import type { RequirementTestCaseItem } from '../data/testcase'
 import { exportTestcasesExcel } from '../api/projects'
 
 export type ExportFormat = 'json' | 'md' | 'excel'
@@ -81,6 +81,10 @@ export const useTestcaseExport = ({
           lines.push(`${index + 1}. ${tc.title || '未命名测试用例'}`)
           lines.push(`   - 编号：${tc.code || tc.id || '暂无'}`)
           lines.push(`   - 类型：${tc.type || '未知类型'}`)
+          lines.push(`   - 场景：${tc.scenario_type}`)
+          if (tc.priority) {
+            lines.push(`   - 优先级：${tc.priority}`)
+          }
           lines.push(`   - 目标：${tc.test_target_desc || '暂无'}`)
           if (tc.test_steps.length > 0) {
             lines.push('   - 步骤：')

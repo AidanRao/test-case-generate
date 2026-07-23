@@ -16,30 +16,32 @@ class QualityStore:
         return None
 
     def save_quality(self, project_id, payload):
-        records = self._load_quality_records()
-        data = {"project_id": str(project_id), **self._quality_payload(payload or {})}
-        updated = False
-        for idx, item in enumerate(records):
-            if isinstance(item, dict) and str(item.get("project_id")) == str(project_id):
-                records[idx] = data
-                updated = True
-                break
-        if not updated:
-            records.append(data)
-        self.io.save(self.path, records)
-        return data
+        with self.io.lock(self.path):
+            records = self._load_quality_records()
+            data = {"project_id": str(project_id), **self._quality_payload(payload or {})}
+            updated = False
+            for idx, item in enumerate(records):
+                if isinstance(item, dict) and str(item.get("project_id")) == str(project_id):
+                    records[idx] = data
+                    updated = True
+                    break
+            if not updated:
+                records.append(data)
+            self.io.save(self.path, records)
+            return data
 
     def _quality_payload(self, payload):
         return {key: payload[key] for key in self.QUALITY_FIELDS if key in payload}
 
     def delete_by_project(self, project_id):
-        records = self._load_quality_records()
-        filtered = [
-            item
-            for item in records
-            if not (isinstance(item, dict) and str(item.get("project_id")) == str(project_id))
-        ]
-        if len(filtered) == len(records):
-            return False
-        self.io.save(self.path, filtered)
-        return True
+        with self.io.lock(self.path):
+            records = self._load_quality_records()
+            filtered = [
+                item
+                for item in records
+                if not (isinstance(item, dict) and str(item.get("project_id")) == str(project_id))
+            ]
+            if len(filtered) == len(records):
+                return False
+            self.io.save(self.path, filtered)
+            return True

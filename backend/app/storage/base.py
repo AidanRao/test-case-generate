@@ -44,6 +44,9 @@ class StorageBackend:
     def add_testcases(self, project_id, requirement_id, testcases):
         raise NotImplementedError()
 
+    def replace_testcases_by_requirement(self, project_id, requirement_id, testcases):
+        raise NotImplementedError()
+
     def update_testcase(self, project_id, testcase_id, payload):
         raise NotImplementedError()
 

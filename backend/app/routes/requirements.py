@@ -1,6 +1,7 @@
 from flask import Blueprint, current_app, request
 
 from app.services.requirement_service import RequirementService
+from app.utils.generation_guard import reject_while_testcases_are_generating
 from app.utils.responses import error, ok
 
 requirements_bp = Blueprint("requirements", __name__)
@@ -30,6 +31,7 @@ def get_requirement(project_id, requirement_id):
 
 
 @requirements_bp.put("/projects/<project_id>/requirements/<requirement_id>")
+@reject_while_testcases_are_generating
 def update_requirement(project_id, requirement_id):
     payload = request.get_json(silent=True) or {}
     storage = current_app.config["STORAGE"]
@@ -43,6 +45,7 @@ def update_requirement(project_id, requirement_id):
 
 
 @requirements_bp.post("/projects/<project_id>/requirements/complete")
+@reject_while_testcases_are_generating
 def complete_requirements(project_id):
     payload = request.get_json(silent=True) or {}
     requirements = payload.get("requirements", [])
@@ -58,6 +61,7 @@ def complete_requirements(project_id):
 
 
 @requirements_bp.post("/projects/<project_id>/requirements")
+@reject_while_testcases_are_generating
 def create_requirement(project_id):
     payload = request.get_json(silent=True) or {}
     storage = current_app.config["STORAGE"]
@@ -71,6 +75,7 @@ def create_requirement(project_id):
 
 
 @requirements_bp.delete("/projects/<project_id>/requirements/<requirement_id>")
+@reject_while_testcases_are_generating
 def delete_requirement(project_id, requirement_id):
     storage = current_app.config["STORAGE"]
     if storage.is_read_only_project(project_id):

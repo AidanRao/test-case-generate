@@ -15,6 +15,12 @@ class AppConfig:
         self.ai_model = ""
         self.ai_base_url = ""
         self.ai_api_key = ""
+        self.testcase_job_workers = max(
+            1, int(os.environ.get("TESTCASE_JOB_WORKERS", "4"))
+        )
+        self.testcase_job_history = max(
+            1, int(os.environ.get("TESTCASE_JOB_HISTORY", "1000"))
+        )
         config_path = os.path.join(base_dir, "config.json")
         config = self._load_config(config_path)
         self.ai_model = config.get("model_name", "")

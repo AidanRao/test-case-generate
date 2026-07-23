@@ -321,6 +321,11 @@ class JsonStorage(StorageBackend):
     def add_testcases(self, project_id, requirement_id, testcases):
         return self.testcase_store.add_testcases(project_id, requirement_id, testcases)
 
+    def replace_testcases_by_requirement(self, project_id, requirement_id, testcases):
+        return self.testcase_store.replace_testcases_by_requirement(
+            project_id, requirement_id, testcases
+        )
+
     def update_testcase(self, project_id, testcase_id, payload):
         return self.testcase_store.update_testcase(project_id, testcase_id, payload)
 

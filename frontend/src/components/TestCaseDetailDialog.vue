@@ -11,7 +11,7 @@
           <h3 class="text-base font-semibold text-slate-800">测试用例详情</h3>
           <div class="mt-3 flex items-center gap-2">
             <button
-              v-if="!isEditing"
+              v-if="!isEditing && !readOnly"
               class="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-700"
               type="button"
               @click="startEdit"
@@ -19,7 +19,7 @@
               编辑
             </button>
             <button
-              v-if="!isEditing"
+              v-if="!isEditing && !readOnly"
               class="rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-600 transition hover:border-rose-300 hover:text-rose-700"
               type="button"
               @click="handleDelete"
@@ -45,36 +45,80 @@
           </div>
         </div>
         <div class="mt-4 grid gap-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4 text-sm">
-          <div>
+          <div class="min-h-14">
             <p class="text-xs font-medium text-slate-400">用例标题</p>
-            <input
-              v-if="isEditing"
-              v-model="draftTestcase.title"
-              class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 focus:border-sky-400 focus:outline-none"
-            />
-            <p v-else class="mt-1 font-medium text-slate-700">{{ displayTestcase.title }}</p>
+            <div class="mt-1 flex items-center gap-2">
+              <div
+                v-if="isEditing"
+                class="relative h-8 w-11 shrink-0 rounded-full"
+                :class="getPriorityBadgeClass(draftTestcase.priority)"
+              >
+                <select
+                  v-model="draftTestcase.priority"
+                  aria-label="优先级"
+                  class="relative z-10 h-full w-full cursor-pointer appearance-none rounded-full bg-transparent pl-2 pr-4 text-xs font-semibold outline-none ring-1 ring-inset ring-black/5 transition focus:ring-2 focus:ring-sky-300"
+                >
+                  <option v-for="item in PRIORITY_LEVELS" :key="item" :value="item">
+                    {{ item }}
+                  </option>
+                </select>
+                <span class="pointer-events-none absolute right-1.5 top-1/2 z-20 -translate-y-1/2 text-[9px] leading-none opacity-60">▾</span>
+              </div>
+              <span
+                v-else
+                class="inline-flex h-6 min-w-10 shrink-0 items-center justify-center rounded-full px-1.5 text-xs font-semibold"
+                :class="getPriorityBadgeClass(displayTestcase.priority)"
+              >
+                {{ displayTestcase.priority || '暂无' }}
+              </span>
+              <input
+                v-if="isEditing"
+                v-model="draftTestcase.title"
+                class="h-8 min-w-0 flex-1 rounded-lg border border-slate-200 px-3 text-sm text-slate-700 focus:border-sky-400 focus:outline-none"
+              />
+              <p v-else class="min-w-0 flex-1 break-words font-semibold leading-6 text-slate-700">
+                {{ displayTestcase.title }}
+              </p>
+            </div>
           </div>
-          <div>
-            <p class="text-xs font-medium text-slate-400">用例类型</p>
-            <select
-              v-if="isEditing"
-              v-model="draftTestcase.type"
-              class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 focus:border-sky-400 focus:outline-none"
-            >
-              <option value="功能测试">功能测试</option>
-              <option value="可靠性测试">可靠性测试</option>
-              <option value="安全性测试">安全性测试</option>
-              <option value="强度测试">强度测试</option>
-              <option value="性能测试">性能测试</option>
-              <option value="接口测试">接口测试</option>
-              <option value="数据处理测试">数据处理测试</option>
-              <option value="边界测试">边界测试</option>
-              <option value="容量测试">容量测试</option>
-              <option value="余量测试">余量测试</option>
-            </select>
-            <span v-else class="mt-1 inline-flex rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
-              {{ displayTestcase.type }}
-            </span>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <p class="text-xs font-medium text-slate-400">用例类型</p>
+              <select
+                v-if="isEditing"
+                v-model="draftTestcase.type"
+                class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 focus:border-sky-400 focus:outline-none"
+              >
+                <option value="功能测试">功能测试</option>
+                <option value="可靠性测试">可靠性测试</option>
+                <option value="安全性测试">安全性测试</option>
+                <option value="强度测试">强度测试</option>
+                <option value="性能测试">性能测试</option>
+                <option value="接口测试">接口测试</option>
+                <option value="数据处理测试">数据处理测试</option>
+                <option value="边界测试">边界测试</option>
+                <option value="容量测试">容量测试</option>
+                <option value="余量测试">余量测试</option>
+              </select>
+              <span v-else class="mt-1 inline-flex rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
+                {{ displayTestcase.type }}
+              </span>
+            </div>
+            <div>
+              <p class="text-xs font-medium text-slate-400">用例场景</p>
+              <select
+                v-if="isEditing"
+                v-model="draftTestcase.scenario_type"
+                class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 focus:border-sky-400 focus:outline-none"
+              >
+                <option v-for="item in SCENARIO_TYPES" :key="item" :value="item">
+                  {{ item }}
+                </option>
+              </select>
+              <span v-else class="mt-1 inline-flex rounded-full bg-sky-50 px-2.5 py-0.5 text-xs font-medium text-sky-700">
+                {{ displayTestcase.scenario_type }}
+              </span>
+            </div>
           </div>
           <div class="grid grid-cols-2 gap-4">
             <div>
@@ -168,18 +212,12 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-
-export interface TestCaseDetailItem {
-  id?: string
-  code: string
-  title: string
-  type: string
-  requirement_id?: string
-  requirement_code?: string
-  test_steps: Array<{ expectation: string; step_desc: string }>
-  test_target_desc: string
-  verify_method: string
-}
+import {
+  PRIORITY_LEVELS,
+  SCENARIO_TYPES,
+  type TestCaseDetailItem,
+  type TestCasePriority
+} from '../data/testcase'
 
 type EditableTestCase = Omit<TestCaseDetailItem, 'test_steps'> & {
   test_steps: Array<{ expectation: string; step_desc: string }>
@@ -188,6 +226,7 @@ type EditableTestCase = Omit<TestCaseDetailItem, 'test_steps'> & {
 const props = defineProps<{
   modelValue: boolean
   testcase: TestCaseDetailItem | null
+  readOnly?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -202,6 +241,7 @@ const draftTestcase = ref<EditableTestCase>({
   code: '',
   title: '',
   type: '',
+  scenario_type: SCENARIO_TYPES[0],
   requirement_id: '',
   requirement_code: '',
   test_steps: [],
@@ -223,6 +263,7 @@ watch(
         code: '',
         title: '',
         type: '',
+        scenario_type: SCENARIO_TYPES[0],
         requirement_id: '',
         requirement_code: '',
         test_steps: [],
@@ -242,6 +283,8 @@ const displayTestcase = computed<TestCaseDetailItem>(() => {
     code: source?.code || '暂无',
     title: source?.title || '暂无',
     type: source?.type || '未知类型',
+    scenario_type: source?.scenario_type || SCENARIO_TYPES[0],
+    priority: source?.priority,
     requirement_id: source?.requirement_id,
     requirement_code: source?.requirement_code,
     test_steps: source?.test_steps ?? [],
@@ -253,6 +296,16 @@ const displayTestcase = computed<TestCaseDetailItem>(() => {
 const stepItems = computed(() => {
   return isEditing.value ? draftTestcase.value.test_steps : displayTestcase.value.test_steps
 })
+
+const priorityBadgeClasses: Record<TestCasePriority, string> = {
+  P0: 'bg-rose-50 text-rose-700',
+  P1: 'bg-amber-50 text-amber-700',
+  P2: 'bg-sky-50 text-sky-700',
+  P3: 'bg-slate-200 text-slate-600'
+}
+
+const getPriorityBadgeClass = (priority?: TestCasePriority) =>
+  priority ? priorityBadgeClasses[priority] : 'bg-slate-100 text-slate-500'
 
 const closeDialog = () => {
   emit('update:modelValue', false)

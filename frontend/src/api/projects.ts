@@ -1,4 +1,5 @@
 import type { ModuleGroup } from '../data/projectStore'
+import type { TestCaseItem } from '../data/testcase'
 import { requestBlob, requestJson } from './http'
 
 type ProjectListResponse = {
@@ -26,17 +27,7 @@ type ProjectDetailResponse = {
     content: string
     project_id: string
     module: string
-    testcases: Array<{
-      requirement_code: string
-      requirement_id: string
-      id: string
-      title: string
-      code: string
-      type: string
-      test_steps: Array<{ expectation: string; step_desc: string }>
-      test_target_desc: string
-      verify_method: string
-    }>
+    testcases: TestCaseItem[]
   }>
 }
 
@@ -44,13 +35,21 @@ type CreateProjectResponse = {
   id: string
 }
 
-type GenerateTestcasesAsyncResponse = {
-  job_id: string
-}
-
-type GenerateTestcasesStatusResponse = {
-  job_id?: string
-  status: 'idle' | 'running' | 'done'
+export type TestcaseGenerationStatus = {
+  job_id: string | null
+  project_id: string
+  requirement_ids: string[]
+  active_requirement_ids: string[]
+  status: 'idle' | 'pending' | 'running' | 'completed' | 'failed'
+  active: boolean
+  created_at: number | null
+  started_at: number | null
+  finished_at: number | null
+  current_requirement_id: string | null
+  completed_requirement_ids: string[]
+  completed_count: number
+  total_count: number
+  error: string | null
 }
 
 export type QualityInfoResponse = {
@@ -68,21 +67,24 @@ type CreateModuleResponse = {
   name: string
 }
 
-type UpdateRequirementPayload = {
+export type UpdateRequirementPayload = {
   title: string
   type: string
   content: string
   module?: string
 }
 
-type UpdateTestcasePayload = {
-  title: string
-  code: string
-  type: string
-  test_steps: Array<{ expectation: string; step_desc: string }>
-  test_target_desc: string
-  verify_method: string
-}
+export type UpdateTestcasePayload = Pick<
+  TestCaseItem,
+  | 'title'
+  | 'code'
+  | 'type'
+  | 'scenario_type'
+  | 'priority'
+  | 'test_steps'
+  | 'test_target_desc'
+  | 'verify_method'
+>
 
 export type CreateRequirementPayload = {
   title: string
@@ -101,7 +103,9 @@ const fetchProjectList = async (portalProjectId?: string | null) => {
 }
 
 const fetchProjectDetail = async (projectId: string) => {
-  const response = await requestJson<ProjectDetailResponse>(`/projects/${projectId}`)
+  const response = await requestJson<ProjectDetailResponse>(`/projects/${projectId}`, {
+    cache: 'no-store'
+  })
   return response.data
 }
 
@@ -113,12 +117,12 @@ const createProject = async (payload: { code: string; title: string; requirement
   return response.data
 }
 
-const generateTestcasesAsync = async (projectId: string, requirementIds?: string[]) => {
+const createTestcaseGenerationJob = async (projectId: string, requirementIds?: string[]) => {
   const body = requirementIds && requirementIds.length > 0
     ? { requirement_ids: requirementIds, replace: true }
     : { replace: true }
-  const response = await requestJson<GenerateTestcasesAsyncResponse>(
-    `/projects/${projectId}/testcases/generate/async`,
+  const response = await requestJson<TestcaseGenerationStatus>(
+    `/projects/${projectId}/testcase-generation-jobs`,
     {
       method: 'POST',
       body: JSON.stringify(body)
@@ -127,9 +131,9 @@ const generateTestcasesAsync = async (projectId: string, requirementIds?: string
   return response.data
 }
 
-const fetchTestcaseGenerateStatus = async (projectId: string) => {
-  const response = await requestJson<GenerateTestcasesStatusResponse>(
-    `/projects/${projectId}/testcases/generate/async`
+const fetchProjectTestcaseGenerationStatus = async (projectId: string) => {
+  const response = await requestJson<TestcaseGenerationStatus>(
+    `/projects/${projectId}/testcase-generation-jobs`
   )
   return response.data
 }
@@ -231,8 +235,8 @@ export {
   fetchProjectQuality,
   createProject,
   updateProject,
-  generateTestcasesAsync,
-  fetchTestcaseGenerateStatus,
+  createTestcaseGenerationJob,
+  fetchProjectTestcaseGenerationStatus,
   deleteProject,
   updateRequirement,
   deleteRequirement,
