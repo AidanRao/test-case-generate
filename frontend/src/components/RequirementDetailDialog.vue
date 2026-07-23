@@ -188,7 +188,9 @@
 <script setup lang="ts">
 import DOMPurify from 'dompurify'
 import { ArrowDown, ArrowRight } from '@element-plus/icons-vue'
+import { katex } from '@mdit/plugin-katex'
 import MarkdownIt from 'markdown-it'
+import 'katex/dist/katex.min.css'
 import { computed, ref, watch } from 'vue'
 import type { RequirementTestCaseItem } from '../data/testcase'
 import TestCaseCard from './testcases/TestCaseCard.vue'
@@ -260,38 +262,19 @@ const markdownRenderer = new MarkdownIt({
   breaks: true,
   html: true,
   linkify: true
+}).use(katex, {
+  throwOnError: false
 })
 
 const renderMarkdown = (markdown: string) => {
   const html = markdownRenderer.render(markdown)
   return DOMPurify.sanitize(html, {
-    ALLOWED_ATTR: ['href', 'rel', 'rowspan', 'colspan', 'target', 'title'],
-    ALLOWED_TAGS: [
-      'a',
-      'blockquote',
-      'br',
-      'code',
-      'em',
-      'h1',
-      'h2',
-      'h3',
-      'h4',
-      'h5',
-      'h6',
-      'hr',
-      'li',
-      'ol',
-      'p',
-      'pre',
-      'strong',
-      'table',
-      'tbody',
-      'td',
-      'th',
-      'thead',
-      'tr',
-      'ul'
-    ]
+    ADD_ATTR: ['target'],
+    USE_PROFILES: {
+      html: true,
+      mathMl: true,
+      svg: true
+    }
   })
 }
 
