@@ -2,14 +2,13 @@
   <div class="shrink-0 rounded-2xl border border-slate-200 bg-white shadow-sm">
     <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4">
       <h2 class="text-base font-semibold text-slate-800">质量信息</h2>
-      <div
+      <GenerationStatusBadge
         v-if="generationStatus"
-        class="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium"
-        :class="statusPillClass"
-      >
-        <span v-if="generationStatus.status === 'running'" class="h-2 w-2 animate-pulse rounded-full bg-amber-500"></span>
-        <span>{{ statusText }}</span>
-      </div>
+        class="px-3 py-1"
+        :active="generationStatus.active"
+        :label="statusText"
+        :tone="statusTone"
+      />
     </div>
     <div class="flex gap-6 p-5">
       <div class="flex-1 space-y-3">
@@ -79,6 +78,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import CoverageDetailDialog from './CoverageDetailDialog.vue'
+import GenerationStatusBadge from './generation/GenerationStatusBadge.vue'
 
 type QualityInfo = {
   success_count: number
@@ -118,8 +118,10 @@ const props = defineProps<{
     }[]
   }[]
   generationStatus?: {
-    status: 'idle' | 'running' | 'done' | 'error'
-    job_id?: string
+    status: 'idle' | 'pending' | 'running' | 'completed' | 'failed'
+    active: boolean
+    completed_count: number
+    total_count: number
   } | null
 }>()
 
@@ -153,18 +155,21 @@ const coverageText = computed(() => `${coveragePercent.value} 覆盖`)
 
 const statusText = computed(() => {
   if (!props.generationStatus) return ''
-  if (props.generationStatus.status === 'running') return '测试用例生成中'
-  if (props.generationStatus.status === 'done') return '测试用例已生成'
-  if (props.generationStatus.status === 'error') return '生成状态获取失败'
+  if (props.generationStatus.status === 'pending') return '测试用例等待生成'
+  if (props.generationStatus.status === 'running') {
+    return `测试用例生成中 ${props.generationStatus.completed_count}/${props.generationStatus.total_count}`
+  }
+  if (props.generationStatus.status === 'completed') return '测试用例生成完成'
+  if (props.generationStatus.status === 'failed') return '测试用例生成失败'
   return '暂无生成任务'
 })
 
-const statusPillClass = computed(() => {
-  if (!props.generationStatus) return ''
-  if (props.generationStatus.status === 'running') return 'bg-amber-50 text-amber-700'
-  if (props.generationStatus.status === 'done') return 'bg-emerald-50 text-emerald-700'
-  if (props.generationStatus.status === 'error') return 'bg-rose-50 text-rose-700'
-  return 'bg-slate-100 text-slate-600'
+const statusTone = computed<'warning' | 'success' | 'danger' | 'neutral'>(() => {
+  if (!props.generationStatus) return 'neutral'
+  if (props.generationStatus.active) return 'warning'
+  if (props.generationStatus.status === 'completed') return 'success'
+  if (props.generationStatus.status === 'failed') return 'danger'
+  return 'neutral'
 })
 
 const dialogVisible = ref(false)

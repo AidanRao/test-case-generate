@@ -1,0 +1,13 @@
+services:
+  test-case-generate:
+    build: .
+    image: test-case-generate
+    container_name: test-case-generate
+    ports:
+      - "8005:80"
+    volumes:
+      - ./backend/data:/app/data
+    environment:
+      - UNIPORTAL_SYNC_ENABLED=false
+      - DATA_DIR=/app/data
+    restart: unless-stopped

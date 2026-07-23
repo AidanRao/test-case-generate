@@ -150,7 +150,9 @@
           </button>
           <button
             v-if="!isGenerating"
-            class="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-700"
+            class="rounded-full border px-3 py-1 text-xs font-semibold transition"
+            :class="generationDisabled ? 'cursor-not-allowed border-slate-100 text-slate-300' : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-700'"
+            :disabled="generationDisabled"
             type="button"
             @click="emitGenerate"
           >
@@ -170,20 +172,12 @@
             <span v-else>暂无测试项</span>
           </div>
           <div v-else class="space-y-2">
-            <button
+            <TestCaseCard
               v-for="(item, index) in testcases"
               :key="item.id || item.code || index"
-              type="button"
-              class="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-sm transition hover:border-slate-300 hover:bg-slate-50"
-              @click="openTestcase(item)"
-            >
-              <div class="min-w-0">
-                <p class="truncate font-medium text-slate-700">{{ item.title }}</p>
-              </div>
-              <span class="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                {{ item.type }}
-              </span>
-            </button>
+              :testcase="item"
+              @select="openTestcase(item)"
+            />
           </div>
         </div>
       </div>
@@ -194,8 +188,12 @@
 <script setup lang="ts">
 import DOMPurify from 'dompurify'
 import { ArrowDown, ArrowRight } from '@element-plus/icons-vue'
+import { katex } from '@mdit/plugin-katex'
 import MarkdownIt from 'markdown-it'
+import 'katex/dist/katex.min.css'
 import { computed, ref, watch } from 'vue'
+import type { RequirementTestCaseItem } from '../data/testcase'
+import TestCaseCard from './testcases/TestCaseCard.vue'
 export interface RequirementDetailItem {
   title: string
   type: string
@@ -205,23 +203,12 @@ export interface RequirementDetailItem {
   code?: string
 }
 
-export interface RequirementTestCaseItem {
-  id?: string
-  code: string
-  title: string
-  type: string
-  requirement_id?: string
-  requirement_code?: string
-  test_steps: Array<{ expectation: string; step_desc: string }>
-  test_target_desc: string
-  verify_method: string
-}
-
 const props = defineProps<{
   modelValue: boolean
   requirement: RequirementDetailItem | null
   testcases: RequirementTestCaseItem[]
   isGenerating?: boolean
+  generationDisabled?: boolean
   readOnly?: boolean
 }>()
 
@@ -275,38 +262,19 @@ const markdownRenderer = new MarkdownIt({
   breaks: true,
   html: true,
   linkify: true
+}).use(katex, {
+  throwOnError: false
 })
 
 const renderMarkdown = (markdown: string) => {
   const html = markdownRenderer.render(markdown)
   return DOMPurify.sanitize(html, {
-    ALLOWED_ATTR: ['href', 'rel', 'rowspan', 'colspan', 'target', 'title'],
-    ALLOWED_TAGS: [
-      'a',
-      'blockquote',
-      'br',
-      'code',
-      'em',
-      'h1',
-      'h2',
-      'h3',
-      'h4',
-      'h5',
-      'h6',
-      'hr',
-      'li',
-      'ol',
-      'p',
-      'pre',
-      'strong',
-      'table',
-      'tbody',
-      'td',
-      'th',
-      'thead',
-      'tr',
-      'ul'
-    ]
+    ADD_ATTR: ['target'],
+    USE_PROFILES: {
+      html: true,
+      mathMl: true,
+      svg: true
+    }
   })
 }
 

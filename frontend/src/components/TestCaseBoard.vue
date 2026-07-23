@@ -24,7 +24,7 @@ import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { Graph, type Cell } from '@antv/x6'
 import Hierarchy from '@antv/hierarchy'
 import type { Requirement } from '../data/projectStore'
-import type { TestCaseDetailItem } from './TestCaseDetailDialog.vue'
+import type { TestCaseDetailItem } from '../data/testcase'
 
 export type BoardNode = {
   id: string

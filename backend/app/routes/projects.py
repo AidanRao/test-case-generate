@@ -1,6 +1,7 @@
 from flask import Blueprint, current_app, request
 
 from app.services.project_service import ProjectService
+from app.utils.generation_guard import reject_while_testcases_are_generating
 from app.utils.responses import error, ok
 
 projects_bp = Blueprint("projects", __name__)
@@ -66,6 +67,7 @@ def get_project(project_id):
 
 
 @projects_bp.put("/projects/<project_id>")
+@reject_while_testcases_are_generating
 def update_project(project_id):
     payload = request.get_json(silent=True) or {}
     storage = current_app.config["STORAGE"]
@@ -81,6 +83,7 @@ def update_project(project_id):
 
 
 @projects_bp.post("/projects/<project_id>/modules")
+@reject_while_testcases_are_generating
 def create_module(project_id):
     payload = request.get_json(silent=True) or {}
     storage = current_app.config["STORAGE"]
@@ -98,6 +101,7 @@ def create_module(project_id):
 
 
 @projects_bp.delete("/projects/<project_id>")
+@reject_while_testcases_are_generating
 def delete_project(project_id):
     storage = current_app.config["STORAGE"]
     if storage.is_read_only_project(project_id):

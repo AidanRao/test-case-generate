@@ -45,6 +45,8 @@
 | `title` | string | 用例标题 |
 | `code` | string | 用例编号 |
 | `type` | string | 用例类型 |
+| `scenario_type` | string | 用例场景，固定为 `正常流程用例`、`边界条件用例`、`异常场景用例`、`组合场景用例`、`回归测试用例` 之一 |
+| `priority` | `P0 \| P1 \| P2 \| P3` | 用例优先级，`P0` 最高，默认为 `P1` |
 | `test_steps` | `{step_desc:string, expectation:string}[]` | 测试步骤 |
 | `test_target_desc` | string | 测试目标 |
 | `verify_method` | string | 验证方法 |
@@ -53,7 +55,7 @@
 
 | 字段 | 类型 | 说明 |
 | --- | --- | --- |
-| `success_count` | number | 成功生成的测试用例数 |
+| `success_count` | number | 成功处理需求数 |
 | `fail_count` | number | 失败处理需求数 |
 | `iterations` | number | 生成迭代次数 |
 | `duration` | number | 耗时，单位秒 |
@@ -125,10 +127,9 @@
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `GET` | `/projects/{projectId}/requirements/{requirementId}/testcases` | 查询需求下的测试用例 |
-| `POST` | `/projects/{projectId}/testcases/generate` | 同步生成测试用例 |
-| `POST` | `/projects/{projectId}/testcases/generate/async` | 异步生成测试用例 |
-| `GET` | `/projects/{projectId}/testcases/generate/async` | 获取项目最近一次生成任务状态 |
-| `GET` | `/projects/{projectId}/testcases/generate/async/{jobId}` | 获取指定生成任务状态 |
+| `POST` | `/projects/{projectId}/testcase-generation-jobs` | 创建测试用例生成任务 |
+| `GET` | `/projects/{projectId}/testcase-generation-jobs` | 获取项目当前活动任务或最近一次任务状态 |
+| `GET` | `/projects/{projectId}/testcase-generation-jobs/{jobId}` | 获取指定生成任务状态 |
 | `PUT` | `/projects/{projectId}/testcases/{testcaseId}` | 更新测试用例 |
 | `DELETE` | `/projects/{projectId}/testcases/{testcaseId}` | 删除测试用例 |
 | `GET` | `/projects/{projectId}/testcases/export` | 导出 Excel |
@@ -139,7 +140,41 @@
 {"requirement_ids":["req-id"],"replace":true,"ai_config":{"api_key":"","base_url":"","model":""}}
 ```
 
-异步生成返回：`{"job_id":"..."}`。任务状态为 `idle`、`pending`、`running`、`done` 或 `error`。
+提交成功返回 HTTP 202 和完整任务状态。同一项目只能有一个活动任务，重复提交返回 HTTP 409。任务状态为 `idle`、`pending`、`running`、`completed` 或 `failed`。
+
+```json
+{
+  "job_id": "job-id",
+  "project_id": "project-id",
+  "requirement_ids": ["req-id"],
+  "active_requirement_ids": ["req-id"],
+  "status": "running",
+  "active": true,
+  "current_requirement_id": "req-id",
+  "completed_requirement_ids": [],
+  "completed_count": 0,
+  "total_count": 1,
+  "error": null
+}
+```
+
+任务状态仅保存在当前后端进程内，服务重启后不会恢复历史任务。
+
+更新测试用例时 `scenario_type` 为必填字段，且必须使用上述五个固定值之一：
+`priority` 可设置为 `P0`、`P1`、`P2` 或 `P3`；新生成及未设置优先级的用例默认为 `P1`。
+
+```json
+{
+  "title": "验证登录成功",
+  "code": "TC-PRJ-001",
+  "type": "功能测试",
+  "scenario_type": "正常流程用例",
+  "priority": "P1",
+  "test_steps": [{"step_desc": "输入正确账号密码", "expectation": "登录成功"}],
+  "test_target_desc": "验证正常登录流程",
+  "verify_method": "TESTING"
+}
+```
 
 ## 质量信息
 
@@ -201,4 +236,4 @@ Body：
 }
 ```
 
-说明：`format` 支持 `json` 和 `md`；`excel` 暂不支持。`is_save` 默认为 `true`，为 `true` 时会创建项目、保存需求、测试用例和质量信息。返回字段为 `quality_info` 与 `test_case`。
+说明：`format` 支持 `json` 和 `md`；`excel` 暂不支持。`is_save` 默认为 `true`，为 `true` 时会创建项目、保存需求、测试用例和质量信息。返回字段为 `quality_info` 与 `test_case`；JSON 用例对象包含 `scenario_type`，Markdown 输出包含“用例场景”。

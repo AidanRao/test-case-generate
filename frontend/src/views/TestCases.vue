@@ -33,29 +33,46 @@
           </div>
         </div>
         <div class="flex min-h-0 flex-1 flex-col gap-5 px-5 py-4">
-          <div class="space-y-3">
-            <div class="flex items-center gap-2">
-              <p class="text-xs font-medium text-slate-400">需求类型统计</p>
-              <span class="rounded-full bg-sky-50 px-2.5 py-0.5 text-xs font-semibold text-sky-700">
-                需求数 {{ requirements.length }}
-              </span>
-            </div>
-            <div class="flex flex-wrap gap-2">
-              <span
-                v-for="item in requirementTypeStats"
-                :key="item.type"
-                class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600"
+          <el-popover
+            :visible="requirementStatsOpen"
+            placement="bottom-start"
+            :width="280"
+            :show-arrow="false"
+            :teleported="true"
+            popper-class="!rounded-xl !border-slate-200 !p-3 !shadow-lg"
+          >
+            <template #reference>
+              <div
+                class="flex w-fit cursor-default items-center gap-2"
+                @mouseenter="showRequirementStats"
+                @mouseleave="hideRequirementStats"
               >
-                {{ item.type }} {{ item.count }}
-              </span>
-              <span
-                v-if="requirementTypeStats.length === 0"
-                class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500"
-              >
-                暂无需求
-              </span>
+                <span class="text-xs font-medium text-slate-400 transition hover:text-slate-600">
+                  需求类型
+                </span>
+                <span class="rounded-full bg-sky-50 px-2.5 py-0.5 text-xs font-semibold text-sky-700 transition hover:bg-sky-100">
+                  需求总数 {{ requirements.length }}
+                </span>
+              </div>
+            </template>
+            <div
+              id="requirement-type-stats-popover"
+              role="dialog"
+              aria-label="需求类型统计"
+            >
+              <div class="mb-2 text-xs font-semibold text-slate-700">需求类型统计</div>
+              <div v-if="requirementTypeStats.length" class="flex flex-wrap gap-2">
+                <span
+                  v-for="item in requirementTypeStats"
+                  :key="item.type"
+                  class="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600"
+                >
+                  {{ item.type }} {{ item.count }}
+                </span>
+              </div>
+              <p v-else class="text-xs text-slate-400">暂无需求</p>
             </div>
-          </div>
+          </el-popover>
           <RequirementList
             :items="requirementItems"
             :selected-index="selectedRequirementIndex"
@@ -68,7 +85,7 @@
         :data="qualityInfo"
         :coverage="coverageInfo"
         :coverage-detail="coverageDetail"
-        :generation-status="effectiveGenerationStatus"
+        :generation-status="generationStatus"
         @open-requirement="openRequirementFromCoverage"
       />
     </div>
@@ -104,7 +121,8 @@
     :requirement="detailRequirement"
     :testcases="detailTestcases"
     :is-generating="detailRequirementGenerating"
-    :read-only="isReadOnlyProject"
+    :generation-disabled="isGenerationActive"
+    :read-only="isReadOnlyProject || isGenerationActive"
     @open-testcase="openTestcaseDetail"
     @save="handleRequirementSave"
     @delete="handleRequirementDelete"
@@ -114,6 +132,7 @@
   <TestCaseDetailDialog
     v-model="testcaseDetailVisible"
     :testcase="testcaseDetail"
+    :read-only="isGenerationActive"
     @save="handleTestcaseSave"
     @delete="handleTestcaseDelete"
   />
@@ -133,7 +152,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft, Download } from '@element-plus/icons-vue'
 import { buildRequirements, type Requirement } from '../data/projectStore'
@@ -141,27 +160,20 @@ import TestCaseBoard from '../components/TestCaseBoard.vue'
 import type { BoardNode } from '../components/TestCaseBoard.vue'
 import RequirementList from '../components/RequirementList.vue'
 import RequirementDetailDialog from '../components/RequirementDetailDialog.vue'
-import type { RequirementDetailItem, RequirementTestCaseItem } from '../components/RequirementDetailDialog.vue'
+import type { RequirementDetailItem } from '../components/RequirementDetailDialog.vue'
 import QualityInfoCard from '../components/QualityInfoCard.vue'
 import TestCaseDetailDialog from '../components/TestCaseDetailDialog.vue'
-import type { TestCaseDetailItem } from '../components/TestCaseDetailDialog.vue'
+import type { RequirementTestCaseItem, TestCaseDetailItem } from '../data/testcase'
 import ExportTestcasesDialog from '../components/ExportTestcasesDialog.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import { useConfirmDialog } from '../composables/useConfirmDialog'
-import { useProjectDetail } from '../composables/useProjectDetail'
+import { useProjectTestcaseWorkspace } from '../composables/useProjectTestcaseWorkspace'
 import {
   buildTestcases,
+  getRequirementIdentity,
   type RequirementWithTestcases
 } from '../composables/useRequirementTestcases'
 import { useTestcaseExport } from '../composables/useTestcaseExport'
-import {
-  deleteRequirement,
-  deleteTestcase,
-  fetchTestcaseGenerateStatus,
-  generateTestcasesAsync,
-  updateRequirement,
-  updateTestcase,
-} from '../api/projects'
 import type { QualityInfoResponse } from '../api/projects'
 
 
@@ -177,8 +189,15 @@ const {
   moduleGroups,
   projectName,
   isReadOnlyProject,
-  loadProjectDetail
-} = useProjectDetail({
+  generationStatus,
+  activeRequirementIds,
+  isGenerationActive,
+  submitGeneration,
+  saveRequirement,
+  removeRequirement,
+  saveTestcase,
+  removeTestcase
+} = useProjectTestcaseWorkspace({
   projectId,
   fallbackToFirstProject: true,
   includeQuality: true
@@ -186,25 +205,17 @@ const {
 
 const requirements = computed<RequirementWithCases[]>(() => buildRequirements(moduleGroups.value) as RequirementWithCases[])
 const requirementItems = computed(() => {
-  const isRunning = generationStatus.value?.status === 'running'
   return requirements.value.map((item) => {
     const testcaseCount = buildTestcases(item).length
+    const requirementId = String(item.ID || item.code || item.title)
     return {
       ...item,
       testcaseCount,
-      isGenerating: isRunning && testcaseCount === 0
+      isGenerating: activeRequirementIds.value.has(requirementId)
     }
   })
 })
 
-const requirementGeneratingMap = computed(() => {
-  const map = new Map<string, boolean>()
-  requirementItems.value.forEach((item) => {
-    const requirementId = item.ID || item.code || item.title
-    map.set(requirementId, Boolean(item.isGenerating))
-  })
-  return map
-})
 const selectedRequirementIndex = ref(0)
 const requirementTypeStats = computed(() => {
   const stats = new Map<string, number>()
@@ -214,20 +225,20 @@ const requirementTypeStats = computed(() => {
   })
   return Array.from(stats.entries()).map(([type, count]) => ({ type, count }))
 })
+const requirementStatsOpen = ref(false)
+
+const showRequirementStats = () => {
+  requirementStatsOpen.value = true
+}
+
+const hideRequirementStats = () => {
+  requirementStatsOpen.value = false
+}
 const hasAnyTestcases = computed(() => requirements.value.some((item) => buildTestcases(item).length > 0))
 const showGenerateTestcasesButton = computed(() => {
-  const status = generationStatus.value?.status
-  return isRemoteProject.value && !hasAnyTestcases.value && status !== 'running'
+  return isRemoteProject.value && !hasAnyTestcases.value && !isGenerationActive.value
 })
-const effectiveGenerationStatus = computed(() => {
-  const status = generationStatus.value
-  if (!status) return status
-  if (status.status === 'idle' && hasAnyTestcases.value) {
-    return { ...status, status: 'done' as const }
-  }
-  return status
-})
-const showExportButton = computed(() => effectiveGenerationStatus.value?.status === 'done' && hasAnyTestcases.value)
+const showExportButton = computed(() => hasAnyTestcases.value)
 
 const coverageInfo = computed(() => {
   const total = requirements.value.length
@@ -268,7 +279,12 @@ const coverageDetail = computed(() =>
 const detailVisible = ref(false)
 const detailRequirement = ref<Requirement | null>(null)
 const detailTestcases = ref<RequirementTestCaseItem[]>([])
-const detailRequirementGenerating = ref(false)
+const detailRequirementGenerating = computed(() => {
+  const requirement = detailRequirement.value
+  if (!requirement) return false
+  const requirementId = String(requirement.ID || requirement.code || requirement.title)
+  return activeRequirementIds.value.has(requirementId)
+})
 
 const testcaseDetail = ref<TestCaseDetailItem | null>(null)
 const testcaseDetailVisible = ref(false)
@@ -293,12 +309,6 @@ const openRequirementDetail = (index: number) => {
   const requirement = requirements.value[index] ?? null
   detailRequirement.value = requirement
   detailTestcases.value = buildTestcases(detailRequirement.value)
-  if (requirement) {
-    const requirementId = requirement.ID || requirement.code || requirement.title
-    detailRequirementGenerating.value = requirementGeneratingMap.value.get(requirementId) ?? false
-  } else {
-    detailRequirementGenerating.value = false
-  }
   detailVisible.value = true
 }
 
@@ -314,8 +324,6 @@ const openRequirementFromBoard = (requirement: RequirementWithCases) => {
   }
   detailRequirement.value = requirement
   detailTestcases.value = buildTestcases(requirement)
-  const requirementId = requirement.ID || requirement.code || requirement.title
-  detailRequirementGenerating.value = requirementGeneratingMap.value.get(requirementId) ?? false
   detailVisible.value = true
 }
 
@@ -326,6 +334,23 @@ const openRequirementFromCoverage = (requirement: RequirementWithCases) => {
 const openTestcaseDetail = (item: TestCaseDetailItem) => {
   testcaseDetail.value = item
   testcaseDetailVisible.value = true
+}
+
+const refreshOpenRequirementTestcases = (requirementIdentity: string, testcaseId?: string) => {
+  const refreshedRequirement = requirements.value.find(
+    (item) => getRequirementIdentity(item) === requirementIdentity
+  ) ?? null
+  if (!refreshedRequirement) {
+    return
+  }
+
+  detailRequirement.value = refreshedRequirement
+  detailTestcases.value = buildTestcases(refreshedRequirement)
+  if (testcaseId) {
+    testcaseDetail.value = detailTestcases.value.find(
+      (item) => String(item.id) === String(testcaseId)
+    ) ?? null
+  }
 }
 
 const openModuleRequirements = (module: string) => {
@@ -357,21 +382,18 @@ const handleRequirementSave = async (payload: RequirementDetailItem) => {
     return
   }
   try {
-    await updateRequirement(projectId.value, requirementId, {
+    await saveRequirement(requirementId, {
       title: payload.title,
       type: payload.type,
       content: payload.content
     })
-    await loadProjectDetail()
     openConfirm({
       title: '生成测试用例',
       message: '是否基于最新需求重新生成测试用例？已生成的用例将被替换。',
       confirmText: '生成',
       onConfirm: async () => {
         try {
-          await generateTestcasesAsync(projectId.value, [requirementId])
-          await loadProjectDetail()
-          refreshGenerationStatus()
+          await submitGeneration([requirementId])
         } catch {
           window.alert('测试用例生成任务提交失败，请稍后重试')
         }
@@ -403,8 +425,7 @@ const handleRequirementDelete = async (payload: RequirementDetailItem) => {
     cancelText: '取消',
     onConfirm: async () => {
       try {
-        await deleteRequirement(projectId.value, requirementId)
-        await loadProjectDetail()
+        await removeRequirement(requirementId)
         detailVisible.value = false
       } catch {
         window.alert('需求删除失败，请稍后重试')
@@ -430,9 +451,7 @@ const handleRequirementGenerateTestcases = async () => {
     confirmText: '生成',
     onConfirm: async () => {
       try {
-        await generateTestcasesAsync(projectId.value, [requirementId])
-        await loadProjectDetail()
-        refreshGenerationStatus()
+        await submitGeneration([requirementId])
       } catch {
         window.alert('测试用例生成任务提交失败，请稍后重试')
       }
@@ -455,9 +474,7 @@ const handleProjectGenerateTestcases = async () => {
     confirmText: '生成',
     onConfirm: async () => {
       try {
-        await generateTestcasesAsync(projectId.value)
-        await loadProjectDetail()
-        refreshGenerationStatus()
+        await submitGeneration()
       } catch {
         window.alert('测试用例生成任务提交失败，请稍后重试')
       }
@@ -473,16 +490,21 @@ const handleTestcaseSave = async (payload: TestCaseDetailItem) => {
     window.alert('测试用例缺少可用的标识')
     return
   }
+  const requirementIdentity = getRequirementIdentity(
+    detailRequirement.value as RequirementWithTestcases | null
+  )
   try {
-    await updateTestcase(projectId.value, payload.id, {
+    await saveTestcase(payload.id, {
       title: payload.title,
       code: payload.code,
       type: payload.type,
+      scenario_type: payload.scenario_type,
+      priority: payload.priority,
       test_steps: payload.test_steps ?? [],
       test_target_desc: payload.test_target_desc,
       verify_method: payload.verify_method
     })
-    await loadProjectDetail()
+    refreshOpenRequirementTestcases(requirementIdentity, payload.id)
     testcaseDetailVisible.value = false
   } catch {
     window.alert('测试用例更新失败，请稍后重试')
@@ -505,8 +527,7 @@ const handleTestcaseDelete = async (payload: TestCaseDetailItem) => {
     cancelText: '取消',
     onConfirm: async () => {
       try {
-        await deleteTestcase(projectId.value, payload.id as string)
-        await loadProjectDetail()
+        await removeTestcase(payload.id as string)
         testcaseDetailVisible.value = false
       } catch {
         window.alert('测试用例删除失败，请稍后重试')
@@ -569,9 +590,6 @@ const qualityInfo = computed(() => ({
   ...(remoteQualityInfo.value ?? fallbackQualityInfo.value),
   req_type_stats: computedReqTypeStats.value
 }))
-
-const generationStatus = ref<{ status: 'idle' | 'running' | 'done' | 'error'; job_id?: string } | null>(null)
-const statusPollingTimer = ref<number | null>(null)
 
 const nodeSizes = {
   root: { width: 200, height: 34 },
@@ -648,52 +666,4 @@ watch(requirements, (nextRequirements) => {
   }
 }, { immediate: true })
 
-const stopStatusPolling = () => {
-  if (statusPollingTimer.value) {
-    window.clearInterval(statusPollingTimer.value)
-    statusPollingTimer.value = null
-  }
-}
-
-const refreshGenerationStatus = async (allowStartPolling = true) => {
-  const remoteId = projectId.value
-  if (!remoteId || remoteId.startsWith('local-')) {
-    generationStatus.value = { status: 'idle' }
-    stopStatusPolling()
-    return
-  }
-  try {
-    const status = await fetchTestcaseGenerateStatus(remoteId)
-    generationStatus.value = status
-    if (status.status === 'running' && allowStartPolling) {
-      if (!statusPollingTimer.value) {
-        statusPollingTimer.value = window.setInterval(() => {
-          loadProjectDetail()
-          refreshGenerationStatus(false)
-        }, 5000)
-      }
-      return
-    }
-    if (status.status !== 'running') {
-      stopStatusPolling()
-    }
-  } catch {
-    generationStatus.value = { status: 'error' }
-    stopStatusPolling()
-  }
-}
-
-onMounted(() => {
-  loadProjectDetail()
-  refreshGenerationStatus()
-})
-
-watch(projectId, () => {
-  loadProjectDetail()
-  refreshGenerationStatus()
-})
-
-onUnmounted(() => {
-  stopStatusPolling()
-})
 </script>

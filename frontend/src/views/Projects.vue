@@ -242,7 +242,7 @@ import { Collection, FolderOpened, Setting } from '@element-plus/icons-vue'
 import KnowledgeBasePanel from '../components/KnowledgeBasePanel.vue'
 import PaginationBar from '../components/PaginationBar.vue'
 import ProjectDialog from '../components/ProjectDialog.vue'
-import { createProject, deleteProject, fetchProjectList, generateTestcasesAsync, updateProject } from '../api/projects'
+import { createProject, createTestcaseGenerationJob, deleteProject, fetchProjectList, updateProject } from '../api/projects'
 import { loadKnowledgeBase, saveKnowledgeBase, type KnowledgeBaseItem } from '../data/knowledgeBaseStore'
 import { buildRequirements, loadProjects, saveProjects, type ModuleGroup, type ProjectRecord } from '../data/projectStore'
 import { loadRecentProjects, recordProjectVisit } from '../data/recentProjectStore'
@@ -466,7 +466,7 @@ const handleDialogSubmit = async (payload: {
   saveProjects(updated)
   if (generateNow && nextId) {
     try {
-      await generateTestcasesAsync(nextId)
+      await createTestcaseGenerationJob(nextId)
     } catch {
       window.alert('测试用例生成任务提交失败，请稍后在项目内重试')
     }

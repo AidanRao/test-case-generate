@@ -22,7 +22,8 @@ class TestCaseExporter:
             '测试目标描述': 'test_target_desc',
             '被测需求标识': 'requirement_code',
             '验证方法': 'verify_method',
-            '测试用例类型': 'test_case_type'
+            '测试用例类型': 'test_case_type',
+            '用例场景': 'scenario_type'
         }
 
         # 1. Find the Header Row (containing "测试步骤")

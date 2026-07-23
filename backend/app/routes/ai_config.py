@@ -23,3 +23,11 @@ def save_config():
     if not config:
         return error(50001, "保存失败", 500)
     return ok(config)
+
+
+@ai_config_bp.post("/ai/config/test")
+def test_connection():
+    payload = request.get_json(silent=True) or {}
+    storage = current_app.config["STORAGE"]
+    service = AIConfigService(storage)
+    return ok(service.test_connection(payload))

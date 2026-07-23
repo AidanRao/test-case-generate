@@ -55,6 +55,7 @@ class IntegrationGenerateTestcasesTest(unittest.TestCase):
                     {
                         "title": "C1",
                         "test_case_type": "功能测试",
+                        "scenario_type": "正常流程用例",
                         "test_steps": [{"step_desc": "s1", "expectation": "e1"}],
                         "test_target_desc": "t1",
                         "verify_method": "TESTING",
@@ -64,6 +65,7 @@ class IntegrationGenerateTestcasesTest(unittest.TestCase):
                     {
                         "title": "C2",
                         "test_case_type": "安全性测试",
+                        "scenario_type": "异常场景用例",
                         "test_steps": [{"step_desc": "s2", "expectation": "e2"}],
                         "test_target_desc": "t2",
                         "verify_method": "TESTING",
@@ -94,6 +96,10 @@ class IntegrationGenerateTestcasesTest(unittest.TestCase):
         self.assertIn("quality_info", data)
         self.assertIn("test_case", data)
         self.assertIsInstance(data["test_case"], list)
+        self.assertEqual(data["test_case"][0]["scenario_type"], "正常流程用例")
+        self.assertEqual(data["test_case"][1]["scenario_type"], "异常场景用例")
+        self.assertEqual(data["test_case"][0]["priority"], "P1")
+        self.assertEqual(data["test_case"][1]["priority"], "P1")
         self.assertEqual(data["quality_info"]["success_count"], 2)
         self.assertEqual(data["quality_info"]["fail_count"], 0)
         self.assertEqual(data["quality_info"]["iterations"], 5)
@@ -108,6 +114,7 @@ class IntegrationGenerateTestcasesTest(unittest.TestCase):
                     {
                         "title": "C1",
                         "test_case_type": "性能测试",
+                        "scenario_type": "边界条件用例",
                         "test_steps": [{"step_desc": "s1", "expectation": "e1"}],
                         "test_target_desc": "t1",
                         "verify_method": "TESTING",

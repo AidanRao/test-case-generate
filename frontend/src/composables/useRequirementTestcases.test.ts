@@ -19,6 +19,9 @@ const fallbackTestcases = buildTestcases(localRequirement)
 if (fallbackTestcases.length !== 2) {
   throw new Error('buildTestcases should create fallback cases from requirement content fragments')
 }
+if (fallbackTestcases[0] && 'priority' in fallbackTestcases[0]) {
+  throw new Error('buildTestcases should not assign the backend-owned priority default')
+}
 
 const remoteModules = mapRemoteModules([
   {
@@ -37,6 +40,8 @@ const remoteModules = mapRemoteModules([
         title: '登录成功',
         code: 'TC-001',
         type: '功能测试',
+        scenario_type: '正常流程用例',
+        priority: 'P1',
         test_steps: [],
         test_target_desc: '验证登录',
         verify_method: 'TESTING'
