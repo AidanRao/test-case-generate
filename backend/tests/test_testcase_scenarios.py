@@ -228,7 +228,7 @@ class TestCaseScenarioApiTest(unittest.TestCase):
             json=self._update_payload("组合场景用例"),
         )
 
-        response = self.client.get(f"/v1/projects/{self.project_id}/testcases/export")
+        response = self.client.get(f"/v1/projects/{self.project_id}/testcases/export?format=xlsx")
         self.addCleanup(response.close)
 
         self.assertEqual(response.status_code, 200)

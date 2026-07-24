@@ -226,7 +226,16 @@ const updateProject = async (projectId: string, payload: { code: string; title: 
 }
 
 const exportTestcasesExcel = async (projectId: string) => {
-  return requestBlob(`/projects/${projectId}/testcases/export`)
+  const params = new URLSearchParams({ format: 'xlsx' })
+  return requestBlob(`/projects/${projectId}/testcases/export?${params.toString()}`)
+}
+
+const exportTestcasesWord = async (projectId: string, templateId = 'default') => {
+  const params = new URLSearchParams({
+    format: 'docx',
+    template_id: templateId
+  })
+  return requestBlob(`/projects/${projectId}/testcases/export?${params.toString()}`)
 }
 
 export {
@@ -244,5 +253,6 @@ export {
   createModule,
   updateTestcase,
   deleteTestcase,
-  exportTestcasesExcel
+  exportTestcasesExcel,
+  exportTestcasesWord
 }

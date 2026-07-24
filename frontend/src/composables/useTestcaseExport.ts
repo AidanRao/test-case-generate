@@ -1,9 +1,9 @@
 import { ref, type ComputedRef } from 'vue'
 import type { ModuleGroup, Requirement } from '../data/projectStore'
 import type { RequirementTestCaseItem } from '../data/testcase'
-import { exportTestcasesExcel } from '../api/projects'
+import { exportTestcasesExcel, exportTestcasesWord } from '../api/projects'
 
-export type ExportFormat = 'json' | 'md' | 'excel'
+export type ExportFormat = 'json' | 'md' | 'word' | 'excel'
 
 type RequirementWithCases = Requirement & {
   testcases?: RequirementTestCaseItem[]
@@ -63,6 +63,19 @@ export const useTestcaseExport = ({
     URL.revokeObjectURL(url)
   }
 
+  const triggerBlobDownload = (blob: Blob, headers: Headers, fallbackFilename: string) => {
+    const disposition = headers.get('content-disposition') || headers.get('Content-Disposition') || ''
+    const filenameMatch = /filename\*=UTF-8''([^;]+)|filename="?([^"]+)"?/i.exec(disposition)
+    const rawName = filenameMatch?.[1] || filenameMatch?.[2]
+    const filename = rawName ? decodeURIComponent(rawName) : fallbackFilename
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
   const buildMarkdown = (modules: ReturnType<typeof buildExportModules>) => {
     const lines: string[] = [`# ${projectName.value} 测试用例导出`]
     modules.forEach((group) => {
@@ -113,17 +126,13 @@ export const useTestcaseExport = ({
       triggerDownload(content, `${baseName}-测试用例.md`, 'text/markdown;charset=utf-8')
       return
     }
+    if (format === 'word') {
+      const { blob, headers } = await exportTestcasesWord(projectId.value)
+      triggerBlobDownload(blob, headers, `${baseName}-测试报告.docx`)
+      return
+    }
     const { blob, headers } = await exportTestcasesExcel(projectId.value)
-    const disposition = headers.get('content-disposition') || headers.get('Content-Disposition') || ''
-    const filenameMatch = /filename\*=UTF-8''([^;]+)|filename="?([^"]+)"?/i.exec(disposition)
-    const rawName = filenameMatch?.[1] || filenameMatch?.[2]
-    const filename = rawName ? decodeURIComponent(rawName) : `${baseName}-测试用例.xlsx`
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = filename
-    link.click()
-    URL.revokeObjectURL(url)
+    triggerBlobDownload(blob, headers, `${baseName}-测试用例.xlsx`)
   }
 
   return {

@@ -132,7 +132,12 @@
 | `GET` | `/projects/{projectId}/testcase-generation-jobs/{jobId}` | 获取指定生成任务状态 |
 | `PUT` | `/projects/{projectId}/testcases/{testcaseId}` | 更新测试用例 |
 | `DELETE` | `/projects/{projectId}/testcases/{testcaseId}` | 删除测试用例 |
-| `GET` | `/projects/{projectId}/testcases/export` | 导出 Excel |
+| `GET` | `/projects/{projectId}/testcases/export` | 导出 Excel 或 Word 测试报告 |
+
+导出查询参数：
+
+- `format`：必填，支持 `xlsx` 和 `docx`。
+- `template_id`：Word 模板标识，缺省为 `default`；仅在 `format=docx` 时使用。
 
 生成 body：
 

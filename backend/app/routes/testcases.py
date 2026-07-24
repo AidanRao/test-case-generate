@@ -7,6 +7,9 @@ import random
 from app.services.project_service import ProjectService
 from app.services.testcase_service import TestCaseService
 from app.models.testcase import DEFAULT_PRIORITY, is_valid_priority, is_valid_scenario_type
+from app.reports.context_builder import build_report_context
+from app.reports.query_service import ReportQueryService
+from app.reports.template_registry import resolve_template
 from app.utils.generation_guard import reject_while_testcases_are_generating
 from app.utils.ids import new_uuid
 from app.utils.responses import error, ok
@@ -139,6 +142,17 @@ def export_testcases(project_id):
     project = storage.get_project(project_id)
     if not project:
         return error(40401, "资源不存在", 404)
+    export_format = (request.args.get("format") or "").strip().lower()
+    if not export_format:
+        return error(40001, "format 参数为必填项", 400)
+    if export_format not in ("xlsx", "docx"):
+        return error(40001, "format 参数不合法", 400)
+    if export_format == "docx":
+        return _export_testcases_word(project_id, storage, config)
+    return _export_testcases_excel(project_id, project, storage, config)
+
+
+def _export_testcases_excel(project_id, project, storage, config):
     try:
         from excel_exporter import TestCaseExporter
     except ModuleNotFoundError:
@@ -183,6 +197,57 @@ def export_testcases(project_id):
 
     file_name = f"{project.get('code') or project_id}-testcases.xlsx"
     return send_file(tmp.name, as_attachment=True, download_name=file_name)
+
+
+def _export_testcases_word(project_id, storage, config):
+    template_id = (request.args.get("template_id") or "default").strip()
+    template = resolve_template(config.base_dir, template_id)
+    if template is None:
+        return error(40001, "template_id 参数不合法", 400)
+
+    source = ReportQueryService(storage).load(project_id)
+    if source is None:
+        return error(40401, "资源不存在", 404)
+    context = build_report_context(source)
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".docx")
+    tmp.close()
+    try:
+        from app.reports.renderer import ReportRenderError, WordReportRenderer
+    except ModuleNotFoundError:
+        current_app.logger.exception("Failed to render Word test report")
+        try:
+            os.remove(tmp.name)
+        except OSError:
+            pass
+        return error(50001, "生成 Word 测试报告失败", 500)
+    try:
+        WordReportRenderer().render(context, template, tmp.name)
+    except (ReportRenderError, OSError, ValueError):
+        current_app.logger.exception("Failed to render Word test report")
+        try:
+            os.remove(tmp.name)
+        except OSError:
+            pass
+        return error(50001, "生成 Word 测试报告失败", 500)
+
+    @after_this_request
+    def _cleanup_word(response):
+        try:
+            os.remove(tmp.name)
+        except OSError:
+            pass
+        return response
+
+    file_name = f"{context['project']['code']}-test-report.docx"
+    return send_file(
+        tmp.name,
+        as_attachment=True,
+        download_name=file_name,
+        mimetype=(
+            "application/vnd.openxmlformats-officedocument."
+            "wordprocessingml.document"
+        ),
+    )
 
 
 def _flatten_incoming_requirements(module_groups):

@@ -57,7 +57,7 @@
 import { computed, ref, watch } from 'vue'
 import { Document, Tickets, Grid } from '@element-plus/icons-vue'
 
-export type ExportFormat = 'json' | 'md' | 'excel'
+export type ExportFormat = 'json' | 'md' | 'word' | 'excel'
 
 const props = defineProps<{
   modelValue: boolean
@@ -73,6 +73,7 @@ const selectedFormat = ref<ExportFormat>('json')
 const formats = computed(() => [
   { value: 'json' as const, label: 'JSON', description: '结构化数据，便于二次处理', icon: Document },
   { value: 'md' as const, label: 'Markdown', description: '文档格式，便于阅读分享', icon: Tickets },
+  { value: 'word' as const, label: 'Word', description: '测试报告，适合评审归档', icon: Document },
   { value: 'excel' as const, label: 'Excel', description: '表格格式，适合统计', icon: Grid }
 ])
 
