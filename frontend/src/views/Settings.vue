@@ -115,22 +115,20 @@
         </div>
       </div>
 
-      <el-dialog
-        v-model="resultDialogVisible"
+      <AppDialog
+        :model-value="resultDialogVisible"
         title="LLM API 测试结果"
-        width="min(760px, 92vw)"
-        :close-on-click-modal="!testing"
+        description="前端测试由浏览器直连 LLM，后端测试由应用服务器发起请求。"
+        size="lg"
+        :close-on-click-outside="!testing"
+        @update:model-value="resultDialogVisible = $event"
       >
-        <p class="mb-5 text-sm text-slate-500">
-          两项测试使用相同配置。前端测试由浏览器直连 LLM，后端测试由应用服务器发起请求。
-        </p>
-
         <div class="grid gap-4 md:grid-cols-2">
           <div class="rounded-2xl border border-slate-200 bg-slate-50/70 p-5">
             <div class="mb-4 flex items-center justify-between gap-3">
               <div class="flex items-center gap-3">
-                <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-100">
-                  <el-icon class="text-indigo-600"><Monitor /></el-icon>
+                <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100">
+                  <el-icon class="text-zinc-700"><Monitor /></el-icon>
                 </div>
                 <div>
                   <h3 class="text-sm font-semibold text-slate-900">前端测试</h3>
@@ -163,8 +161,8 @@
           <div class="rounded-2xl border border-slate-200 bg-slate-50/70 p-5">
             <div class="mb-4 flex items-center justify-between gap-3">
               <div class="flex items-center gap-3">
-                <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-sky-100">
-                  <el-icon class="text-sky-600"><DataLine /></el-icon>
+                <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100">
+                  <el-icon class="text-zinc-700"><DataLine /></el-icon>
                 </div>
                 <div>
                   <h3 class="text-sm font-semibold text-slate-900">后端测试</h3>
@@ -195,16 +193,16 @@
           </div>
         </div>
 
-        <template #footer>
-          <button
-            class="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+        <template #footer-end>
+          <AppDialogButton
+            variant="primary"
             :disabled="testing"
             @click="resultDialogVisible = false"
           >
             {{ testing ? '测试中...' : '关闭' }}
-          </button>
+          </AppDialogButton>
         </template>
-      </el-dialog>
+      </AppDialog>
 
       <div class="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div class="border-b border-slate-100 px-6 py-4">
@@ -315,7 +313,9 @@
 import { reactive, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft, Setting, CircleCheck, CircleClose, Timer, Warning, Monitor, DataLine } from '@element-plus/icons-vue'
-import { ElMessage } from 'element-plus'
+import AppDialog from '../components/ui/AppDialog.vue'
+import AppDialogButton from '../components/ui/AppDialogButton.vue'
+import { useAppFeedback } from '../composables/useAppFeedback'
 import {
   getConfig,
   saveConfig,
@@ -326,6 +326,7 @@ import { getSystemTasks, runSystemTask, updateSystemTask, type SystemTask } from
 
 const router = useRouter()
 const route = useRoute()
+const { notify } = useAppFeedback()
 
 const loading = ref(true)
 const saving = ref(false)
@@ -368,7 +369,7 @@ const loadConfig = async () => {
 
 const saveConfigHandler = async () => {
   if (!form.baseUrl.trim()) {
-    ElMessage.warning('请输入 Base URL')
+    notify({ message: '请输入 Base URL' })
     return
   }
 
@@ -381,10 +382,10 @@ const saveConfigHandler = async () => {
     }
 
     await saveConfig(payload)
-    ElMessage.success('保存成功')
+    notify({ message: '保存成功', tone: 'success' })
     await loadConfig()
   } catch {
-    ElMessage.error('保存失败，请稍后重试')
+    notify({ message: '保存失败，请稍后重试', tone: 'error' })
   } finally {
     saving.value = false
   }
@@ -402,7 +403,7 @@ const loadTasks = async () => {
   try {
     tasks.value = (await getSystemTasks()).map(toTaskEditor)
   } catch {
-    ElMessage.error('定时任务配置加载失败')
+    notify({ message: '定时任务配置加载失败', tone: 'error' })
   } finally {
     tasksLoading.value = false
   }
@@ -426,7 +427,7 @@ const isTaskRunning = (taskId: string) => Boolean(tasksRunning[taskId])
 const saveTaskConfig = async (task: SystemTaskEditor) => {
   const interval = Number(task.interval_seconds)
   if (!Number.isInteger(interval) || interval < 5 || interval > 86400) {
-    ElMessage.warning('执行间隔应为 5 至 86400 秒之间的整数')
+    notify({ message: '执行间隔应为 5 至 86400 秒之间的整数' })
     return
   }
   let kwargs: Record<string, unknown>
@@ -437,7 +438,7 @@ const saveTaskConfig = async (task: SystemTaskEditor) => {
     }
     kwargs = parsed as Record<string, unknown>
   } catch {
-    ElMessage.warning('kwargs 必须是合法的 JSON 对象')
+    notify({ message: 'kwargs 必须是合法的 JSON 对象' })
     return
   }
   tasksSaving[task.id] = true
@@ -448,9 +449,9 @@ const saveTaskConfig = async (task: SystemTaskEditor) => {
       kwargs
     })
     replaceTask(updated)
-    ElMessage.success('定时任务配置已保存')
+    notify({ message: '定时任务配置已保存', tone: 'success' })
   } catch {
-    ElMessage.error('定时任务配置保存失败')
+    notify({ message: '定时任务配置保存失败', tone: 'error' })
   } finally {
     tasksSaving[task.id] = false
   }
@@ -461,9 +462,9 @@ const runTaskNow = async (task: SystemTaskEditor) => {
   try {
     const updated = await runSystemTask(task.id)
     replaceTask(updated)
-    ElMessage.success('任务执行完成')
+    notify({ message: '任务执行完成', tone: 'success' })
   } catch {
-    ElMessage.error('任务执行失败，请检查数据源状态')
+    notify({ message: '任务执行失败，请检查数据源状态', tone: 'error' })
   } finally {
     tasksRunning[task.id] = false
   }
@@ -545,7 +546,7 @@ const runBackendTest = async (payload: { api_key: string; base_url: string; mode
 
 const testConnection = async () => {
   if (!form.baseUrl.trim()) {
-    ElMessage.warning('请输入 Base URL')
+    notify({ message: '请输入 Base URL' })
     return
   }
 

@@ -1,64 +1,40 @@
 <template>
-  <el-dialog
+  <AppDialog
     :model-value="modelValue"
-    width="720px"
-    align-center
-    @close="closeDialog"
+    title="需求详情"
+    size="lg"
+    @update:model-value="emit('update:modelValue', $event)"
   >
+    <template v-if="!isEditing && !readOnly" #header-actions>
+      <AppDialogButton
+        class="!min-h-7 !px-3 !py-1 text-xs"
+        @click="startEdit"
+      >
+        编辑
+      </AppDialogButton>
+      <AppDialogButton
+        variant="danger"
+        class="!min-h-7 !px-3 !py-1 text-xs"
+        @click="handleDelete"
+      >
+        删除
+      </AppDialogButton>
+    </template>
+
     <div class="space-y-6">
       <div>
-        <div class="flex items-center justify-between">
-          <button
-            class="flex min-w-0 items-center gap-2 text-left text-base font-semibold text-slate-800 transition hover:text-slate-600"
-            type="button"
-            :aria-expanded="requirementExpanded"
-            @click="toggleRequirement"
-          >
-            <el-icon class="text-sm text-slate-500">
-              <ArrowDown v-if="requirementExpanded" />
-              <ArrowRight v-else />
-            </el-icon>
-            <span>需求详情</span>
-          </button>
-          <div class="mt-3 flex items-center gap-2">
-            <button
-              v-if="!isEditing"
-              class="rounded-full border px-3 py-1 text-xs font-semibold transition"
-              :class="readOnly ? 'cursor-not-allowed border-slate-100 text-slate-300' : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-700'"
-              :disabled="readOnly"
-              type="button"
-              @click="startEdit"
-            >
-              编辑
-            </button>
-            <button
-              v-if="!isEditing"
-              class="rounded-full border px-3 py-1 text-xs font-semibold transition"
-              :class="readOnly ? 'cursor-not-allowed border-slate-100 text-slate-300' : 'border-rose-200 text-rose-600 hover:border-rose-300 hover:text-rose-700'"
-              :disabled="readOnly"
-              type="button"
-              @click="handleDelete"
-            >
-              删除
-            </button>
-            <button
-              v-if="isEditing"
-              class="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-700"
-              type="button"
-              @click="cancelEdit"
-            >
-              取消
-            </button>
-            <button
-              v-if="isEditing"
-              class="rounded-full bg-sky-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-sky-700"
-              type="button"
-              @click="saveEdit"
-            >
-              保存
-            </button>
-          </div>
-        </div>
+        <button
+          class="flex min-w-0 items-center gap-2 text-left text-base font-semibold text-slate-800 transition hover:text-slate-600"
+          type="button"
+          :aria-expanded="requirementExpanded"
+          @click="toggleRequirement"
+        >
+          <el-icon class="text-sm text-slate-500">
+            <ArrowDown v-if="requirementExpanded" />
+            <ArrowRight v-else />
+          </el-icon>
+          <span>基本信息</span>
+        </button>
         <div v-show="requirementExpanded" class="mt-4 grid gap-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4 text-sm">
           <div class="grid grid-cols-2 gap-4">
             <div class="min-w-0">
@@ -66,7 +42,7 @@
               <input
                 v-if="isEditing"
                 v-model="draftRequirement.title"
-                class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-700 focus:border-sky-400 focus:outline-none"
+                class="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-800 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-950/5"
               />
               <p v-else class="mt-1 truncate font-medium text-slate-700" :title="displayRequirement.title">{{ displayRequirement.title }}</p>
             </div>
@@ -75,7 +51,7 @@
               <select
                 v-if="isEditing"
                 v-model="draftRequirement.type"
-                class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 focus:border-sky-400 focus:outline-none"
+                class="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-800 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-950/5"
               >
                 <option value="功能需求">功能需求</option>
                 <option value="可靠性需求">可靠性需求</option>
@@ -120,7 +96,7 @@
               v-if="isEditing && requirementContentExpanded"
               v-model="draftRequirement.content"
               rows="4"
-              class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-400 focus:outline-none"
+              class="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-950/5"
             ></textarea>
             <div
               v-else-if="requirementContentExpanded"
@@ -148,16 +124,14 @@
               {{ testcases.length }}
             </span>
           </button>
-          <button
+          <AppDialogButton
             v-if="!isGenerating"
-            class="rounded-full border px-3 py-1 text-xs font-semibold transition"
-            :class="generationDisabled ? 'cursor-not-allowed border-slate-100 text-slate-300' : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-700'"
+            class="!min-h-7 !px-3 !py-1 text-xs"
             :disabled="generationDisabled"
-            type="button"
             @click="emitGenerate"
           >
             {{ testcases.length > 0 ? '重新生成测试用例' : '生成测试用例' }}
-          </button>
+          </AppDialogButton>
         </div>
         <div v-show="testcasesExpanded" class="mt-4 space-y-3">
           <div
@@ -182,7 +156,16 @@
         </div>
       </div>
     </div>
-  </el-dialog>
+
+    <template v-if="isEditing" #footer-start>
+      <AppDialogButton @click="cancelEdit">取消</AppDialogButton>
+    </template>
+    <template v-if="isEditing" #footer-end>
+      <AppDialogButton variant="primary" :disabled="saveDisabled" @click="saveEdit">
+        保存
+      </AppDialogButton>
+    </template>
+  </AppDialog>
 </template>
 
 <script setup lang="ts">
@@ -194,6 +177,8 @@ import 'katex/dist/katex.min.css'
 import { computed, ref, watch } from 'vue'
 import type { RequirementTestCaseItem } from '../data/testcase'
 import TestCaseCard from './testcases/TestCaseCard.vue'
+import AppDialog from './ui/AppDialog.vue'
+import AppDialogButton from './ui/AppDialogButton.vue'
 export interface RequirementDetailItem {
   title: string
   type: string
@@ -257,6 +242,7 @@ const displayRequirement = computed(() => {
     content: source?.content || '无详细内容'
   }
 })
+const saveDisabled = computed(() => !draftRequirement.value.title.trim() || !draftRequirement.value.content.trim())
 
 const markdownRenderer = new MarkdownIt({
   breaks: true,
@@ -280,10 +266,6 @@ const renderMarkdown = (markdown: string) => {
 
 const renderedRequirementContent = computed(() => renderMarkdown(displayRequirement.value.content))
 
-const closeDialog = () => {
-  emit('update:modelValue', false)
-}
-
 const startEdit = () => {
   if (!props.requirement) return
   draftRequirement.value = { ...props.requirement }
@@ -300,6 +282,7 @@ const cancelEdit = () => {
 }
 
 const saveEdit = () => {
+  if (saveDisabled.value) return
   emit('save', { ...draftRequirement.value })
   isEditing.value = false
 }

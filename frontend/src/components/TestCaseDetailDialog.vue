@@ -1,50 +1,29 @@
 <template>
-  <el-dialog
+  <AppDialog
     :model-value="modelValue"
-    width="720px"
-    align-center
-    @close="closeDialog"
+    title="测试用例详情"
+    size="lg"
+    @update:model-value="emit('update:modelValue', $event)"
   >
+    <template v-if="!isEditing && !readOnly" #header-actions>
+      <AppDialogButton
+        class="!min-h-7 !px-3 !py-1 text-xs"
+        @click="startEdit"
+      >
+        编辑
+      </AppDialogButton>
+      <AppDialogButton
+        variant="danger"
+        class="!min-h-7 !px-3 !py-1 text-xs"
+        @click="handleDelete"
+      >
+        删除
+      </AppDialogButton>
+    </template>
+
     <div class="space-y-6">
       <div>
-        <div class="flex items-center justify-between">
-          <h3 class="text-base font-semibold text-slate-800">测试用例详情</h3>
-          <div class="mt-3 flex items-center gap-2">
-            <button
-              v-if="!isEditing && !readOnly"
-              class="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-700"
-              type="button"
-              @click="startEdit"
-            >
-              编辑
-            </button>
-            <button
-              v-if="!isEditing && !readOnly"
-              class="rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-600 transition hover:border-rose-300 hover:text-rose-700"
-              type="button"
-              @click="handleDelete"
-            >
-              删除
-            </button>
-            <button
-              v-if="isEditing"
-              class="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-700"
-              type="button"
-              @click="cancelEdit"
-            >
-              取消
-            </button>
-            <button
-              v-if="isEditing"
-              class="rounded-full bg-sky-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-sky-700"
-              type="button"
-              @click="saveEdit"
-            >
-              保存
-            </button>
-          </div>
-        </div>
-        <div class="mt-4 grid gap-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4 text-sm">
+        <div class="grid gap-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4 text-sm">
           <div class="min-h-14">
             <p class="text-xs font-medium text-slate-400">用例标题</p>
             <div class="mt-1 flex items-center gap-2">
@@ -56,7 +35,7 @@
                 <select
                   v-model="draftTestcase.priority"
                   aria-label="优先级"
-                  class="relative z-10 h-full w-full cursor-pointer appearance-none rounded-full bg-transparent pl-2 pr-4 text-xs font-semibold outline-none ring-1 ring-inset ring-black/5 transition focus:ring-2 focus:ring-sky-300"
+                  class="relative z-10 h-full w-full cursor-pointer appearance-none rounded-full bg-transparent pl-2 pr-4 text-xs font-semibold outline-none ring-1 ring-inset ring-black/5 transition focus:ring-2 focus:ring-zinc-400"
                 >
                   <option v-for="item in PRIORITY_LEVELS" :key="item" :value="item">
                     {{ item }}
@@ -74,7 +53,7 @@
               <input
                 v-if="isEditing"
                 v-model="draftTestcase.title"
-                class="h-8 min-w-0 flex-1 rounded-lg border border-slate-200 px-3 text-sm text-slate-700 focus:border-sky-400 focus:outline-none"
+                class="h-8 min-w-0 flex-1 rounded-lg border border-zinc-200 px-3 text-sm text-zinc-800 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-950/5"
               />
               <p v-else class="min-w-0 flex-1 break-words font-semibold leading-6 text-slate-700">
                 {{ displayTestcase.title }}
@@ -87,7 +66,7 @@
               <select
                 v-if="isEditing"
                 v-model="draftTestcase.type"
-                class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 focus:border-sky-400 focus:outline-none"
+                class="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-800 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-950/5"
               >
                 <option value="功能测试">功能测试</option>
                 <option value="可靠性测试">可靠性测试</option>
@@ -109,7 +88,7 @@
               <select
                 v-if="isEditing"
                 v-model="draftTestcase.scenario_type"
-                class="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 focus:border-sky-400 focus:outline-none"
+                class="mt-1 w-full rounded-lg border border-zinc-200 bg-white px-3 py-1.5 text-sm text-zinc-800 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-950/5"
               >
                 <option v-for="item in SCENARIO_TYPES" :key="item" :value="item">
                   {{ item }}
@@ -136,7 +115,7 @@
               v-if="isEditing"
               v-model="draftTestcase.test_target_desc"
               rows="3"
-              class="mt-1 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-400 focus:outline-none"
+              class="mt-1 w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-950/5"
             ></textarea>
             <p v-else class="mt-1 leading-relaxed text-slate-600">{{ displayTestcase.test_target_desc }}</p>
           </div>
@@ -170,7 +149,7 @@
                   v-if="isEditing"
                   :value="draftTestcase.test_steps[index]?.step_desc ?? ''"
                   @input="updateStep(index, 'step_desc', ($event.target as HTMLInputElement).value)"
-                  class="w-full rounded-lg border border-slate-200 px-2 py-1 text-sm text-slate-700 focus:border-sky-400 focus:outline-none"
+                  class="w-full rounded-lg border border-zinc-200 px-2 py-1 text-sm text-zinc-800 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-950/5"
                 />
                 <span v-else>{{ step.step_desc }}</span>
               </div>
@@ -179,35 +158,43 @@
                   v-if="isEditing"
                   :value="draftTestcase.test_steps[index]?.expectation ?? ''"
                   @input="updateStep(index, 'expectation', ($event.target as HTMLInputElement).value)"
-                  class="w-full rounded-lg border border-slate-200 px-2 py-1 text-sm text-slate-700 focus:border-sky-400 focus:outline-none"
+                  class="w-full rounded-lg border border-zinc-200 px-2 py-1 text-sm text-zinc-800 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-950/5"
                 />
                 <span v-else>{{ step.expectation }}</span>
               </div>
               <div class="flex items-center px-2">
-                <button
+                <AppDialogButton
                   v-if="isEditing"
-                  class="rounded-full border border-rose-200 px-2 py-0.5 text-xs font-semibold text-rose-600 transition hover:border-rose-300 hover:text-rose-700"
-                  type="button"
+                  variant="danger"
+                  class="!min-h-7 !px-2 !py-0.5 text-xs"
                   @click="removeStep(index)"
                 >
                   删除
-                </button>
+                </AppDialogButton>
               </div>
             </div>
           </div>
           <div v-if="isEditing" class="mt-3 flex items-center gap-2">
-            <button
-              class="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-700"
-              type="button"
+            <AppDialogButton
+              class="!min-h-7 !px-3 !py-1 text-xs"
               @click="addStep"
             >
               新增步骤
-            </button>
+            </AppDialogButton>
           </div>
         </div>
       </div>
     </div>
-  </el-dialog>
+
+    <template v-if="isEditing" #footer-start>
+      <AppDialogButton @click="cancelEdit">取消</AppDialogButton>
+    </template>
+    <template v-if="isEditing" #footer-end>
+      <AppDialogButton variant="primary" :disabled="saveDisabled" @click="saveEdit">
+        保存
+      </AppDialogButton>
+    </template>
+  </AppDialog>
 </template>
 
 <script setup lang="ts">
@@ -218,6 +205,8 @@ import {
   type TestCaseDetailItem,
   type TestCasePriority
 } from '../data/testcase'
+import AppDialog from './ui/AppDialog.vue'
+import AppDialogButton from './ui/AppDialogButton.vue'
 
 type EditableTestCase = Omit<TestCaseDetailItem, 'test_steps'> & {
   test_steps: Array<{ expectation: string; step_desc: string }>
@@ -296,6 +285,7 @@ const displayTestcase = computed<TestCaseDetailItem>(() => {
 const stepItems = computed(() => {
   return isEditing.value ? draftTestcase.value.test_steps : displayTestcase.value.test_steps
 })
+const saveDisabled = computed(() => !draftTestcase.value.title.trim())
 
 const priorityBadgeClasses: Record<TestCasePriority, string> = {
   P0: 'bg-rose-50 text-rose-700',
@@ -306,10 +296,6 @@ const priorityBadgeClasses: Record<TestCasePriority, string> = {
 
 const getPriorityBadgeClass = (priority?: TestCasePriority) =>
   priority ? priorityBadgeClasses[priority] : 'bg-slate-100 text-slate-500'
-
-const closeDialog = () => {
-  emit('update:modelValue', false)
-}
 
 const startEdit = () => {
   if (!props.testcase) return
@@ -331,6 +317,7 @@ const cancelEdit = () => {
 }
 
 const saveEdit = () => {
+  if (saveDisabled.value) return
   emit('save', { ...draftTestcase.value })
   isEditing.value = false
 }

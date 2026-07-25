@@ -1,44 +1,38 @@
 <template>
-  <el-dialog
+  <AppDialog
     :model-value="modelValue"
-    width="420px"
-    align-center
     title="新增模块"
-    @close="closeDialog"
+    size="sm"
+    @update:model-value="emit('update:modelValue', $event)"
   >
     <div class="space-y-2">
-      <p class="text-xs font-medium text-slate-400">模块名</p>
+      <label for="module-name" class="text-sm font-medium text-zinc-700">模块名</label>
       <input
+        id="module-name"
         ref="nameInput"
         v-model="moduleName"
-        class="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:border-sky-400 focus:outline-none focus:ring-1 focus:ring-sky-400"
+        class="w-full rounded-lg border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-zinc-400 focus:ring-2 focus:ring-zinc-950/5"
         placeholder="请输入模块名"
         @keydown.enter="submitForm"
       />
+      <p v-if="moduleError" class="text-xs text-red-600">{{ moduleError }}</p>
     </div>
-    <template #footer>
-      <div class="flex items-center gap-3">
-        <button
-          class="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-          type="button"
-          @click="closeDialog"
-        >
-          取消
-        </button>
-        <button
-          class="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-sky-700"
-          type="button"
-          @click="submitForm"
-        >
-          确定
-        </button>
-      </div>
+
+    <template #footer-start>
+      <AppDialogButton @click="closeDialog">取消</AppDialogButton>
     </template>
-  </el-dialog>
+    <template #footer-end>
+      <AppDialogButton variant="primary" :disabled="submitDisabled" @click="submitForm">
+        确定
+      </AppDialogButton>
+    </template>
+  </AppDialog>
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
+import AppDialog from './ui/AppDialog.vue'
+import AppDialogButton from './ui/AppDialogButton.vue'
 
 const props = defineProps<{
   modelValue: boolean
@@ -52,6 +46,12 @@ const emit = defineEmits<{
 
 const moduleName = ref('')
 const nameInput = ref<HTMLInputElement | null>(null)
+const normalizedModuleName = computed(() => moduleName.value.trim())
+const moduleError = computed(() => {
+  if (!normalizedModuleName.value) return ''
+  return props.existingModules.includes(normalizedModuleName.value) ? '模块名已存在' : ''
+})
+const submitDisabled = computed(() => !normalizedModuleName.value || Boolean(moduleError.value))
 
 watch(
   () => props.modelValue,
@@ -70,15 +70,7 @@ const closeDialog = () => {
 }
 
 const submitForm = () => {
-  const nextModuleName = moduleName.value.trim()
-  if (!nextModuleName) {
-    window.alert('请输入模块名')
-    return
-  }
-  if (props.existingModules.includes(nextModuleName)) {
-    window.alert('模块名已存在')
-    return
-  }
-  emit('create', nextModuleName)
+  if (submitDisabled.value) return
+  emit('create', normalizedModuleName.value)
 }
 </script>

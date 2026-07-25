@@ -1,34 +1,27 @@
 <template>
-  <el-dialog
+  <AppDialog
     :model-value="modelValue"
-    width="420px"
-    align-center
-    @close="handleCancel"
+    :title="title"
+    size="sm"
+    @update:model-value="handleModelUpdate"
   >
-    <div class="space-y-4">
-      <h3 class="text-base font-semibold text-slate-800">{{ title }}</h3>
-      <p class="text-sm text-slate-600">{{ message }}</p>
-      <div class="flex justify-end gap-2">
-        <button
-          class="rounded-full border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-700"
-          type="button"
-          @click="handleCancel"
-        >
-          {{ cancelText }}
-        </button>
-        <button
-          class="rounded-full bg-sky-600 px-3 py-1 text-xs font-semibold text-white transition hover:bg-sky-700"
-          type="button"
-          @click="handleConfirm"
-        >
-          {{ confirmText }}
-        </button>
-      </div>
-    </div>
-  </el-dialog>
+    <p class="text-sm leading-6 text-zinc-600">{{ message }}</p>
+
+    <template #footer-start>
+      <AppDialogButton @click="handleCancel">{{ cancelText }}</AppDialogButton>
+    </template>
+    <template #footer-end>
+      <AppDialogButton :variant="tone === 'danger' ? 'danger' : 'primary'" @click="handleConfirm">
+        {{ confirmText }}
+      </AppDialogButton>
+    </template>
+  </AppDialog>
 </template>
 
 <script setup lang="ts">
+import AppDialog from './ui/AppDialog.vue'
+import AppDialogButton from './ui/AppDialogButton.vue'
+
 const props = withDefaults(
   defineProps<{
     modelValue: boolean
@@ -36,11 +29,13 @@ const props = withDefaults(
     message: string
     confirmText?: string
     cancelText?: string
+    tone?: 'primary' | 'danger'
   }>(),
   {
     title: '确认操作',
     confirmText: '确定',
-    cancelText: '取消'
+    cancelText: '取消',
+    tone: 'primary'
   }
 )
 
@@ -58,5 +53,13 @@ const handleConfirm = () => {
 const handleCancel = () => {
   emit('cancel')
   emit('update:modelValue', false)
+}
+
+const handleModelUpdate = (value: boolean) => {
+  if (!value) {
+    handleCancel()
+    return
+  }
+  emit('update:modelValue', value)
 }
 </script>

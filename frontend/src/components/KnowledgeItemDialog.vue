@@ -1,21 +1,16 @@
 <template>
-  <div v-if="modelValue" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-    <div class="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl">
-      <div class="flex items-center justify-between">
-        <h2 class="text-lg font-semibold text-slate-900">{{ dialogTitle }}</h2>
-        <button
-          class="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
-          @click="closeDialog"
-        >
-          ×
-        </button>
-      </div>
-      <div class="mt-5 space-y-4">
+  <AppDialog
+    :model-value="modelValue"
+    :title="dialogTitle"
+    size="md"
+    @update:model-value="emit('update:modelValue', $event)"
+  >
+      <div class="space-y-4">
         <div>
           <label class="text-sm font-medium text-slate-700">条目名称</label>
           <input
             v-model="title"
-            class="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-700 focus:border-sky-400 focus:outline-none"
+            class="mt-2 w-full rounded-xl border border-zinc-200 px-4 py-2 text-sm text-zinc-800 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-950/5"
             placeholder="请输入知识条目名称"
           />
           <p v-if="formErrors.title" class="mt-1 text-xs text-rose-600">{{ formErrors.title }}</p>
@@ -25,7 +20,7 @@
             <label class="text-sm font-medium text-slate-700">状态</label>
             <select
               v-model="status"
-              class="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-700 focus:border-sky-400 focus:outline-none"
+              class="mt-2 w-full rounded-xl border border-zinc-200 px-4 py-2 text-sm text-zinc-800 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-950/5"
             >
               <option value="draft">草稿</option>
               <option value="published">已发布</option>
@@ -35,7 +30,7 @@
             <label class="text-sm font-medium text-slate-700">关联项目</label>
             <select
               v-model="projectId"
-              class="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-700 focus:border-sky-400 focus:outline-none"
+              class="mt-2 w-full rounded-xl border border-zinc-200 px-4 py-2 text-sm text-zinc-800 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-950/5"
             >
               <option value="">未关联</option>
               <option v-for="project in projects" :key="project.id" :value="String(project.id)">
@@ -49,7 +44,7 @@
           <div class="mt-2 flex items-center gap-2">
             <input
               v-model="tagInput"
-              class="h-10 flex-1 rounded-xl border border-slate-200 px-4 text-sm text-slate-700 focus:border-sky-400 focus:outline-none"
+              class="h-10 flex-1 rounded-xl border border-zinc-200 px-4 text-sm text-zinc-800 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-950/5"
               placeholder="输入标签后回车或点击加号"
               @keydown.enter.prevent="addTag()"
             />
@@ -84,7 +79,7 @@
           <textarea
             v-model="summary"
             rows="2"
-            class="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-700 focus:border-sky-400 focus:outline-none"
+            class="mt-2 w-full rounded-xl border border-zinc-200 px-4 py-2 text-sm text-zinc-800 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-950/5"
             placeholder="简短描述知识点内容"
           />
         </div>
@@ -93,28 +88,21 @@
           <textarea
             v-model="content"
             rows="5"
-            class="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-700 focus:border-sky-400 focus:outline-none"
+            class="mt-2 w-full rounded-xl border border-zinc-200 px-4 py-2 text-sm text-zinc-800 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-950/5"
             placeholder="请输入知识点详细内容"
           />
           <p v-if="formErrors.content" class="mt-1 text-xs text-rose-600">{{ formErrors.content }}</p>
         </div>
       </div>
-      <div class="mt-6 flex justify-end gap-3">
-        <button
-          class="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-700"
-          @click="closeDialog"
-        >
-          取消
-        </button>
-        <button
-          class="rounded-full bg-sky-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-sky-700"
-          @click="submitDialog"
-        >
+      <template #footer-start>
+        <AppDialogButton @click="closeDialog">取消</AppDialogButton>
+      </template>
+      <template #footer-end>
+        <AppDialogButton variant="primary" :disabled="submitDisabled" @click="submitDialog">
           {{ dialogActionLabel }}
-        </button>
-      </div>
-    </div>
-  </div>
+        </AppDialogButton>
+      </template>
+  </AppDialog>
 </template>
 
 <script setup lang="ts">
@@ -122,6 +110,8 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { Plus } from '@element-plus/icons-vue'
 import type { KnowledgeBaseItem, KnowledgeStatus } from '../data/knowledgeBaseStore'
 import type { ProjectRecord } from '../data/projectStore'
+import AppDialog from './ui/AppDialog.vue'
+import AppDialogButton from './ui/AppDialogButton.vue'
 
 const props = defineProps<{
   modelValue: boolean
@@ -158,6 +148,7 @@ const formErrors = ref({
 
 const dialogTitle = computed(() => (props.mode === 'edit' ? '编辑知识条目' : '新建知识条目'))
 const dialogActionLabel = computed(() => (props.mode === 'edit' ? '保存' : '创建'))
+const submitDisabled = computed(() => !title.value.trim() || !content.value.trim())
 
 const resetForm = () => {
   title.value = ''
@@ -229,9 +220,7 @@ const validateForm = () => {
 }
 
 const submitDialog = () => {
-  if (!validateForm()) {
-    return
-  }
+  if (submitDisabled.value || !validateForm()) return
   emit('submit', {
     title: title.value.trim(),
     tags: tags.value,

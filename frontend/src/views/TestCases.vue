@@ -139,16 +139,6 @@
 
   <ExportTestcasesDialog v-model="exportDialogVisible" @export="handleExport" />
 
-  <ConfirmDialog
-    v-model="confirmVisible"
-    :title="confirmTitle"
-    :message="confirmMessage"
-    :confirm-text="confirmConfirmText"
-    :cancel-text="confirmCancelText"
-    @confirm="handleConfirm"
-    @cancel="handleCancel"
-  />
-
 </template>
 
 <script setup lang="ts">
@@ -165,8 +155,7 @@ import QualityInfoCard from '../components/QualityInfoCard.vue'
 import TestCaseDetailDialog from '../components/TestCaseDetailDialog.vue'
 import type { RequirementTestCaseItem, TestCaseDetailItem } from '../data/testcase'
 import ExportTestcasesDialog from '../components/ExportTestcasesDialog.vue'
-import ConfirmDialog from '../components/ConfirmDialog.vue'
-import { useConfirmDialog } from '../composables/useConfirmDialog'
+import { useAppFeedback } from '../composables/useAppFeedback'
 import { useProjectTestcaseWorkspace } from '../composables/useProjectTestcaseWorkspace'
 import {
   buildTestcases,
@@ -179,6 +168,7 @@ import type { QualityInfoResponse } from '../api/projects'
 
 const router = useRouter()
 const route = useRoute()
+const { notify, confirm } = useAppFeedback()
 
 const projectId = computed(() => String(route.params.projectId ?? ''))
 type RequirementWithCases = RequirementWithTestcases & { module: string }
@@ -289,17 +279,6 @@ const detailRequirementGenerating = computed(() => {
 const testcaseDetail = ref<TestCaseDetailItem | null>(null)
 const testcaseDetailVisible = ref(false)
 
-const {
-  confirmVisible,
-  confirmTitle,
-  confirmMessage,
-  confirmConfirmText,
-  confirmCancelText,
-  openConfirm,
-  handleConfirm,
-  handleCancel
-} = useConfirmDialog()
-
 const selectRequirement = (index: number) => {
   selectedRequirementIndex.value = index
 }
@@ -373,12 +352,12 @@ const handleRequirementSave = async (payload: RequirementDetailItem) => {
     return
   }
   if (!isRemoteProject.value) {
-    window.alert('本地项目暂不支持修改需求')
+    notify({ message: '本地项目暂不支持修改需求' })
     return
   }
   const requirementId = payload.ID || payload.code
   if (!requirementId) {
-    window.alert('需求缺少可用的标识')
+    notify({ message: '需求缺少可用的标识', tone: 'error' })
     return
   }
   try {
@@ -387,21 +366,21 @@ const handleRequirementSave = async (payload: RequirementDetailItem) => {
       type: payload.type,
       content: payload.content
     })
-    openConfirm({
+    const shouldGenerate = await confirm({
       title: '生成测试用例',
       message: '是否基于最新需求重新生成测试用例？已生成的用例将被替换。',
-      confirmText: '生成',
-      onConfirm: async () => {
-        try {
-          await submitGeneration([requirementId])
-        } catch {
-          window.alert('测试用例生成任务提交失败，请稍后重试')
-        }
-      }
+      confirmText: '生成'
     })
+    if (shouldGenerate) {
+      try {
+        await submitGeneration([requirementId])
+      } catch {
+        notify({ message: '测试用例生成任务提交失败，请稍后重试', tone: 'error' })
+      }
+    }
     detailVisible.value = false
   } catch {
-    window.alert('需求更新失败，请稍后重试')
+    notify({ message: '需求更新失败，请稍后重试', tone: 'error' })
   }
 }
 
@@ -410,84 +389,82 @@ const handleRequirementDelete = async (payload: RequirementDetailItem) => {
     return
   }
   if (!isRemoteProject.value) {
-    window.alert('本地项目暂不支持删除需求')
+    notify({ message: '本地项目暂不支持删除需求' })
     return
   }
   const requirementId = payload.ID || payload.code
   if (!requirementId) {
-    window.alert('需求缺少可用的标识')
+    notify({ message: '需求缺少可用的标识', tone: 'error' })
     return
   }
-  openConfirm({
+  const confirmed = await confirm({
     title: '删除需求',
     message: '确定要删除该需求吗？删除后该需求的所有测试用例也将被删除，无法恢复。',
     confirmText: '删除',
     cancelText: '取消',
-    onConfirm: async () => {
-      try {
-        await removeRequirement(requirementId)
-        detailVisible.value = false
-      } catch {
-        window.alert('需求删除失败，请稍后重试')
-      }
-    }
+    tone: 'danger'
   })
+  if (!confirmed) return
+  try {
+    await removeRequirement(requirementId)
+    detailVisible.value = false
+  } catch {
+    notify({ message: '需求删除失败，请稍后重试', tone: 'error' })
+  }
 }
 
 const handleRequirementGenerateTestcases = async () => {
   if (!isRemoteProject.value) {
-    window.alert('本地项目暂不支持生成测试用例')
+    notify({ message: '本地项目暂不支持生成测试用例' })
     return
   }
   const requirement = detailRequirement.value
   const requirementId = requirement?.ID || requirement?.code
   if (!requirementId) {
-    window.alert('需求缺少可用的标识')
+    notify({ message: '需求缺少可用的标识', tone: 'error' })
     return
   }
-  openConfirm({
+  const confirmed = await confirm({
     title: '生成测试用例',
     message: '将为该需求重新生成测试用例，已生成的用例将被替换。',
-    confirmText: '生成',
-    onConfirm: async () => {
-      try {
-        await submitGeneration([requirementId])
-      } catch {
-        window.alert('测试用例生成任务提交失败，请稍后重试')
-      }
-    }
+    confirmText: '生成'
   })
+  if (!confirmed) return
+  try {
+    await submitGeneration([requirementId])
+  } catch {
+    notify({ message: '测试用例生成任务提交失败，请稍后重试', tone: 'error' })
+  }
 }
 
 const handleProjectGenerateTestcases = async () => {
   if (!isRemoteProject.value) {
-    window.alert('本地项目暂不支持生成测试用例')
+    notify({ message: '本地项目暂不支持生成测试用例' })
     return
   }
   if (requirements.value.length === 0) {
-    window.alert('暂无需求，无法生成测试用例')
+    notify({ message: '暂无需求，无法生成测试用例' })
     return
   }
-  openConfirm({
+  const confirmed = await confirm({
     title: '生成测试用例',
     message: '将根据当前需求生成测试用例，已生成的用例将被替换。',
-    confirmText: '生成',
-    onConfirm: async () => {
-      try {
-        await submitGeneration()
-      } catch {
-        window.alert('测试用例生成任务提交失败，请稍后重试')
-      }
-    }
+    confirmText: '生成'
   })
+  if (!confirmed) return
+  try {
+    await submitGeneration()
+  } catch {
+    notify({ message: '测试用例生成任务提交失败，请稍后重试', tone: 'error' })
+  }
 }
 const handleTestcaseSave = async (payload: TestCaseDetailItem) => {
   if (!isRemoteProject.value) {
-    window.alert('本地项目暂不支持修改测试用例')
+    notify({ message: '本地项目暂不支持修改测试用例' })
     return
   }
   if (!payload.id) {
-    window.alert('测试用例缺少可用的标识')
+    notify({ message: '测试用例缺少可用的标识', tone: 'error' })
     return
   }
   const requirementIdentity = getRequirementIdentity(
@@ -507,33 +484,33 @@ const handleTestcaseSave = async (payload: TestCaseDetailItem) => {
     refreshOpenRequirementTestcases(requirementIdentity, payload.id)
     testcaseDetailVisible.value = false
   } catch {
-    window.alert('测试用例更新失败，请稍后重试')
+    notify({ message: '测试用例更新失败，请稍后重试', tone: 'error' })
   }
 }
 
 const handleTestcaseDelete = async (payload: TestCaseDetailItem) => {
   if (!isRemoteProject.value) {
-    window.alert('本地项目暂不支持删除测试用例')
+    notify({ message: '本地项目暂不支持删除测试用例' })
     return
   }
   if (!payload.id) {
-    window.alert('测试用例缺少可用的标识')
+    notify({ message: '测试用例缺少可用的标识', tone: 'error' })
     return
   }
-  openConfirm({
+  const confirmed = await confirm({
     title: '删除测试用例',
     message: '确定要删除该测试用例吗？删除后无法恢复。',
     confirmText: '删除',
     cancelText: '取消',
-    onConfirm: async () => {
-      try {
-        await removeTestcase(payload.id as string)
-        testcaseDetailVisible.value = false
-      } catch {
-        window.alert('测试用例删除失败，请稍后重试')
-      }
-    }
+    tone: 'danger'
   })
+  if (!confirmed) return
+  try {
+    await removeTestcase(payload.id as string)
+    testcaseDetailVisible.value = false
+  } catch {
+    notify({ message: '测试用例删除失败，请稍后重试', tone: 'error' })
+  }
 }
 
 const goBack = () => {

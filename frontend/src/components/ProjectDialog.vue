@@ -1,19 +1,11 @@
 <template>
-  <div
-    v-if="modelValue"
-    class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
+  <AppDialog
+    :model-value="modelValue"
+    :title="dialogTitle"
+    size="md"
+    @update:model-value="emit('update:modelValue', $event)"
   >
-    <div class="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
-      <div class="flex items-center justify-between">
-        <h2 class="text-lg font-semibold text-slate-900">{{ dialogTitle }}</h2>
-        <button
-          class="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
-          @click="closeDialog"
-        >
-          ×
-        </button>
-      </div>
-      <div class="mt-5 space-y-4">
+      <div class="space-y-4">
         <template v-if="isCreateMode && step === 2">
           <div>
             <h3 class="text-sm font-medium text-slate-700">需求预览</h3>
@@ -22,7 +14,7 @@
                 v-if="isParsing"
                 class="flex items-center gap-3 rounded-lg border border-dashed border-slate-200 bg-white px-4 py-4 text-sm text-slate-600"
               >
-                <div class="h-4 w-4 animate-spin rounded-full border-2 border-slate-200 border-t-sky-600"></div>
+                <div class="h-4 w-4 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-950"></div>
                 <span>{{ parsingText }}</span>
               </div>
               <div
@@ -65,7 +57,7 @@
             <p class="mt-2 text-xs text-slate-500">请选择在创建项目后的生成方式</p>
             <div class="mt-4 space-y-3 text-sm text-slate-600">
               <label class="flex items-start gap-3 rounded-xl border border-slate-200 px-3 py-3">
-                <input v-model="generateMode" type="radio" value="now" class="mt-1 h-4 w-4" />
+                <input v-model="generateMode" type="radio" value="now" class="mt-1 h-4 w-4 accent-zinc-950" />
                 <div class="flex-1">
                   <div class="flex items-center gap-2">
                     <span class="font-medium text-slate-700">立刻生成</span>
@@ -74,7 +66,7 @@
                 </div>
               </label>
               <label class="flex items-start gap-3 rounded-xl border border-slate-200 px-3 py-3">
-                <input v-model="generateMode" type="radio" value="later" class="mt-1 h-4 w-4" />
+                <input v-model="generateMode" type="radio" value="later" class="mt-1 h-4 w-4 accent-zinc-950" />
                 <div class="flex-1">
                   <div class="flex items-center gap-2">
                     <span class="font-medium text-slate-700">稍后生成</span>
@@ -90,7 +82,7 @@
             <label class="text-sm font-medium text-slate-700">项目名称</label>
             <input
               v-model="name"
-              class="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-700 focus:border-sky-400 focus:outline-none"
+              class="mt-2 w-full rounded-xl border border-zinc-200 px-4 py-2 text-sm text-zinc-800 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-950/5"
               placeholder="请输入项目名称"
             />
             <p v-if="formErrors.name" class="mt-1 text-xs text-rose-600">{{ formErrors.name }}</p>
@@ -99,7 +91,7 @@
             <label class="text-sm font-medium text-slate-700">项目编号</label>
             <input
               v-model="code"
-              class="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2 text-sm text-slate-700 focus:border-sky-400 focus:outline-none"
+              class="mt-2 w-full rounded-xl border border-zinc-200 px-4 py-2 text-sm text-zinc-800 outline-none transition focus:border-zinc-400 focus:ring-2 focus:ring-zinc-950/5"
               placeholder="例如 PRJ-002"
             />
             <p v-if="formErrors.code" class="mt-1 text-xs text-rose-600">{{ formErrors.code }}</p>
@@ -110,7 +102,7 @@
               ref="fileInputRef"
               type="file"
               accept=".json,application/json"
-              class="mt-2 w-full rounded-xl border border-dashed border-slate-200 px-4 py-3 text-sm text-slate-500"
+              class="mt-2 w-full rounded-xl border border-dashed border-zinc-300 px-4 py-3 text-sm text-zinc-500 transition file:mr-3 file:rounded-md file:border-0 file:bg-zinc-100 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-zinc-700 hover:border-zinc-400"
               @change="handleFileChange"
             />
             <p v-if="fileName" class="mt-2 text-xs text-slate-500">已选择：{{ fileName }}</p>
@@ -118,29 +110,30 @@
           </div>
         </template>
       </div>
-      <div class="mt-6 flex justify-end gap-3">
-        <button
-          class="rounded-full border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:border-slate-300 hover:text-slate-700"
-          @click="handleSecondaryAction"
-        >
+
+      <template #footer-start>
+        <AppDialogButton @click="handleSecondaryAction">
           {{ secondaryLabel }}
-        </button>
-        <button
-          class="rounded-full bg-sky-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-sky-700"
-          :class="primaryDisabled ? 'cursor-not-allowed opacity-60 hover:bg-sky-600' : ''"
+        </AppDialogButton>
+      </template>
+      <template #footer-end>
+        <AppDialogButton
+          variant="primary"
           :disabled="primaryDisabled"
           @click="handlePrimaryAction"
         >
           {{ primaryLabel }}
-        </button>
-      </div>
-    </div>
-  </div>
+        </AppDialogButton>
+      </template>
+  </AppDialog>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import type { ModuleGroup } from '../data/projectStore'
+import { isProjectCodeDuplicate } from '../data/projectCodeValidation'
+import AppDialog from './ui/AppDialog.vue'
+import AppDialogButton from './ui/AppDialogButton.vue'
 
 const props = defineProps<{
   modelValue: boolean
@@ -148,6 +141,7 @@ const props = defineProps<{
   initialName?: string
   initialCode?: string
   initialModules?: ModuleGroup[]
+  occupiedProjectCodes?: string[]
 }>()
 
 const emit = defineEmits<{
@@ -185,7 +179,13 @@ const secondaryLabel = computed(() => {
   if (!isCreateMode.value) return '取消'
   return step.value === 1 ? '取消' : '上一步'
 })
-const primaryDisabled = computed(() => isCreateMode.value && step.value === 2 && !isFileValid.value)
+const primaryDisabled = computed(() => {
+  const missingBaseFields = !name.value.trim() || !code.value.trim()
+  if (!isCreateMode.value) return missingBaseFields
+  if (step.value === 1) return missingBaseFields || !selectedFile.value
+  if (step.value === 2) return isParsing.value || !isFileValid.value
+  return missingBaseFields || !isFileValid.value
+})
 const totalRequirements = computed(() =>
   modules.value.reduce((sum, group) => sum + group.requirements.length, 0)
 )
@@ -252,7 +252,13 @@ const handleFileChange = async (event: Event) => {
 
 const validateBase = () => {
   formErrors.value.name = name.value.trim() ? '' : '请输入项目名称'
-  formErrors.value.code = code.value.trim() ? '' : '请输入项目编号'
+  if (!code.value.trim()) {
+    formErrors.value.code = '请输入项目编号'
+  } else if (isProjectCodeDuplicate(code.value, props.occupiedProjectCodes ?? [])) {
+    formErrors.value.code = '项目编号已存在'
+  } else {
+    formErrors.value.code = ''
+  }
   return !formErrors.value.name && !formErrors.value.code
 }
 

@@ -1,43 +1,31 @@
 <template>
-  <div
-    v-if="modelValue"
-    class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"
-    @click.self="closeDialog"
+  <AppDialog
+    :model-value="modelValue"
+    title="覆盖率明细"
+    description="点击模块行展开二级需求覆盖情况"
+    size="lg"
+    @update:model-value="emit('update:modelValue', $event)"
   >
-    <div class="w-full max-w-3xl rounded-2xl bg-white p-6 shadow-xl">
-      <div class="flex items-center justify-between">
-        <div>
-          <h3 class="text-lg font-semibold text-slate-900">覆盖率明细</h3>
-          <p class="mt-1 text-xs text-slate-500">点击模块行展开二级需求覆盖情况</p>
-        </div>
-        <button
-          class="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
-          type="button"
-          @click="closeDialog"
-        >
-          ×
-        </button>
-      </div>
-      <div class="mt-5 overflow-hidden rounded-xl border border-slate-200">
-        <div class="grid grid-cols-[1fr_auto] items-center gap-2 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-500">
+    <div class="overflow-hidden rounded-xl border border-zinc-200">
+        <div class="grid grid-cols-[1fr_auto] items-center gap-2 bg-zinc-50 px-4 py-3 text-xs font-semibold text-zinc-500">
           <span>一级需求（模块）</span>
           <span class="text-right">覆盖情况</span>
         </div>
-        <div class="divide-y divide-slate-100">
+        <div class="divide-y divide-zinc-100">
           <div v-for="module in coverageDetail" :key="module.moduleId" class="px-4">
             <button
-              class="flex w-full items-center justify-between py-3 text-left text-sm text-slate-700 transition hover:text-slate-900"
+              class="flex w-full items-center justify-between py-3 text-left text-sm text-zinc-700 transition hover:text-zinc-950"
               type="button"
               @click="toggleModule(module.moduleId)"
             >
               <div class="flex items-center gap-2">
                 <span class="font-semibold">{{ module.moduleTitle }}</span>
               </div>
-              <span class="text-xs font-semibold text-slate-500">
+              <span class="text-xs font-semibold text-zinc-500">
                 {{ module.coveredCount }}/{{ module.totalCount }}
               </span>
             </button>
-            <div v-if="expandedModules.includes(module.moduleId)" class="pb-3 text-xs text-slate-500">
+            <div v-if="expandedModules.includes(module.moduleId)" class="pb-3 text-xs text-zinc-500">
               <button
                 v-for="item in module.items"
                 :key="item.id"
@@ -62,15 +50,15 @@
               <div v-if="module.items.length === 0" class="px-2 py-2 text-slate-400">暂无二级需求</div>
             </div>
           </div>
-          <div v-if="coverageDetail.length === 0" class="px-4 py-4 text-sm text-slate-400">暂无覆盖数据</div>
+          <div v-if="coverageDetail.length === 0" class="px-4 py-4 text-sm text-zinc-400">暂无覆盖数据</div>
         </div>
       </div>
-    </div>
-  </div>
+  </AppDialog>
 </template>
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import AppDialog from './ui/AppDialog.vue'
 
 type CoverageDetailItem = {
   id: string
@@ -115,10 +103,6 @@ watch(
     }
   }
 )
-
-const closeDialog = () => {
-  emit('update:modelValue', false)
-}
 
 const toggleModule = (moduleId: string) => {
   if (expandedModules.value.includes(moduleId)) {

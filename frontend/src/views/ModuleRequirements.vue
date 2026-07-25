@@ -183,16 +183,6 @@
       @delete="handleTestcaseDelete"
     />
 
-    <ConfirmDialog
-      v-model="confirmVisible"
-      :title="confirmTitle"
-      :message="confirmMessage"
-      :confirm-text="confirmConfirmText"
-      :cancel-text="confirmCancelText"
-      @confirm="handleConfirm"
-      @cancel="handleCancel"
-    />
-
   </div>
 </template>
 
@@ -200,7 +190,6 @@
 import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ArrowLeft, Plus } from '@element-plus/icons-vue'
-import ConfirmDialog from '../components/ConfirmDialog.vue'
 import CreateModuleDialog from '../components/CreateModuleDialog.vue'
 import CreateRequirementDialog from '../components/CreateRequirementDialog.vue'
 import ModuleSelectDropdown from '../components/ModuleSelectDropdown.vue'
@@ -209,7 +198,7 @@ import RequirementDetailDialog from '../components/RequirementDetailDialog.vue'
 import type { RequirementDetailItem } from '../components/RequirementDetailDialog.vue'
 import TestCaseDetailDialog from '../components/TestCaseDetailDialog.vue'
 import type { RequirementTestCaseItem, TestCaseDetailItem } from '../data/testcase'
-import { useConfirmDialog } from '../composables/useConfirmDialog'
+import { useAppFeedback } from '../composables/useAppFeedback'
 import { useProjectTestcaseWorkspace } from '../composables/useProjectTestcaseWorkspace'
 import {
   buildTestcases,
@@ -224,6 +213,7 @@ type PageRequirement = RequirementWithTestcases & { module: string }
 
 const router = useRouter()
 const route = useRoute()
+const { notify, confirm } = useAppFeedback()
 
 const projectId = computed(() => String(route.params.projectId ?? ''))
 const moduleName = computed(() => String(route.params.moduleName ?? ''))
@@ -262,17 +252,6 @@ const detailRequirementGenerating = computed(() => {
   const requirementId = getRequirementIdentity(detailRequirement.value)
   return Boolean(requirementId && activeRequirementIds.value.has(requirementId))
 })
-
-const {
-  confirmVisible,
-  confirmTitle,
-  confirmMessage,
-  confirmConfirmText,
-  confirmCancelText,
-  openConfirm,
-  handleConfirm,
-  handleCancel
-} = useConfirmDialog()
 
 const moduleOptions = computed(() => {
   const options = moduleGroups.value.map((item) => item.module)
@@ -317,11 +296,11 @@ const formatTestcaseCount = (item: PageRequirement) => {
 
 const openCreateDialog = () => {
   if (isGenerationActive.value) {
-    window.alert('测试用例生成期间不能新增需求')
+    notify({ message: '测试用例生成期间不能新增需求' })
     return
   }
   if (isReadOnlyProject.value) {
-    window.alert('UniPortal 来源需求为只读，请在 UniPortal 中管理')
+    notify({ message: 'UniPortal 来源需求为只读，请在 UniPortal 中管理' })
     return
   }
   createRequirementVisible.value = true
@@ -376,46 +355,47 @@ const refreshOpenRequirementTestcases = (requirementIdentity: string, testcaseId
   }
 }
 
-const confirmDeleteRequirement = (item: PageRequirement) => {
+const confirmDeleteRequirement = async (item: PageRequirement) => {
   if (isReadOnlyProject.value) {
     return
   }
-  openConfirm({
+  const confirmed = await confirm({
     title: '删除需求',
     message: '确定要删除该需求吗？删除后无法恢复。',
     confirmText: '删除',
     cancelText: '取消',
-    onConfirm: async () => {
-      if (projectId.value.startsWith('local-')) {
-        if (!deleteLocalRequirement(moduleName.value, item)) {
-          window.alert('未找到要删除的需求')
-          return
-        }
-        if (detailRequirement.value && isSameRequirement(detailRequirement.value, item)) {
-          detailVisible.value = false
-          detailRequirement.value = null
-          detailTestcases.value = []
-        }
-        return
-      }
-
-      const requirementId = item.id || item.ID || item.code
-      if (!requirementId) {
-        window.alert('需求缺少可用的标识')
-        return
-      }
-      try {
-        await removeRequirement(requirementId)
-        if (detailRequirement.value && isSameRequirement(detailRequirement.value, item)) {
-          detailVisible.value = false
-          detailRequirement.value = null
-          detailTestcases.value = []
-        }
-      } catch {
-        window.alert('需求删除失败，请稍后重试')
-      }
-    }
+    tone: 'danger'
   })
+  if (!confirmed) return
+
+  if (projectId.value.startsWith('local-')) {
+    if (!deleteLocalRequirement(moduleName.value, item)) {
+      notify({ message: '未找到要删除的需求', tone: 'error' })
+      return
+    }
+    if (detailRequirement.value && isSameRequirement(detailRequirement.value, item)) {
+      detailVisible.value = false
+      detailRequirement.value = null
+      detailTestcases.value = []
+    }
+    return
+  }
+
+  const requirementId = item.id || item.ID || item.code
+  if (!requirementId) {
+    notify({ message: '需求缺少可用的标识', tone: 'error' })
+    return
+  }
+  try {
+    await removeRequirement(requirementId)
+    if (detailRequirement.value && isSameRequirement(detailRequirement.value, item)) {
+      detailVisible.value = false
+      detailRequirement.value = null
+      detailTestcases.value = []
+    }
+  } catch {
+    notify({ message: '需求删除失败，请稍后重试', tone: 'error' })
+  }
 }
 
 const handleRequirementSave = async (payload: RequirementDetailItem) => {
@@ -430,7 +410,7 @@ const handleRequirementSave = async (payload: RequirementDetailItem) => {
 
   if (projectId.value.startsWith('local-')) {
     if (!updateLocalRequirement(moduleName.value, currentRequirement, payload)) {
-      window.alert('未找到要修改的需求')
+      notify({ message: '未找到要修改的需求', tone: 'error' })
       return
     }
     const nextDetail = moduleRequirements.value.find((item) =>
@@ -445,7 +425,7 @@ const handleRequirementSave = async (payload: RequirementDetailItem) => {
 
   const requirementId = currentRequirement.id || payload.ID || payload.code
   if (!requirementId) {
-    window.alert('需求缺少可用的标识')
+    notify({ message: '需求缺少可用的标识', tone: 'error' })
     return
   }
   try {
@@ -458,20 +438,20 @@ const handleRequirementSave = async (payload: RequirementDetailItem) => {
     if (detailRequirement.value) {
       detailTestcases.value = buildTestcases(detailRequirement.value)
     }
-    openConfirm({
+    const shouldGenerate = await confirm({
       title: '生成测试用例',
       message: '是否基于最新需求重新生成测试用例？已生成的用例将被替换。',
-      confirmText: '生成',
-      onConfirm: async () => {
-        try {
-          await submitGeneration([requirementId])
-        } catch {
-          window.alert('测试用例生成任务提交失败，请稍后重试')
-        }
-      }
+      confirmText: '生成'
     })
+    if (shouldGenerate) {
+      try {
+        await submitGeneration([requirementId])
+      } catch {
+        notify({ message: '测试用例生成任务提交失败，请稍后重试', tone: 'error' })
+      }
+    }
   } catch {
-    window.alert('需求更新失败，请稍后重试')
+    notify({ message: '需求更新失败，请稍后重试', tone: 'error' })
   }
 }
 
@@ -482,36 +462,35 @@ const handleRequirementDelete = async (payload: RequirementDetailItem) => {
 
 const handleRequirementGenerateTestcases = async () => {
   if (projectId.value.startsWith('local-')) {
-    window.alert('本地项目暂不支持生成测试用例')
+    notify({ message: '本地项目暂不支持生成测试用例' })
     return
   }
   const requirement = detailRequirement.value
   const requirementId = requirement?.id || requirement?.ID || requirement?.code
   if (!requirementId) {
-    window.alert('需求缺少可用的标识')
+    notify({ message: '需求缺少可用的标识', tone: 'error' })
     return
   }
-  openConfirm({
+  const confirmed = await confirm({
     title: '生成测试用例',
     message: '将为该需求重新生成测试用例，已生成的用例将被替换。',
-    confirmText: '生成',
-    onConfirm: async () => {
-      try {
-        await submitGeneration([requirementId])
-      } catch {
-        window.alert('测试用例生成任务提交失败，请稍后重试')
-      }
-    }
+    confirmText: '生成'
   })
+  if (!confirmed) return
+  try {
+    await submitGeneration([requirementId])
+  } catch {
+    notify({ message: '测试用例生成任务提交失败，请稍后重试', tone: 'error' })
+  }
 }
 
 const handleTestcaseSave = async (payload: TestCaseDetailItem) => {
   if (projectId.value.startsWith('local-')) {
-    window.alert('本地项目暂不支持修改测试用例')
+    notify({ message: '本地项目暂不支持修改测试用例' })
     return
   }
   if (!payload.id) {
-    window.alert('测试用例缺少可用的标识')
+    notify({ message: '测试用例缺少可用的标识', tone: 'error' })
     return
   }
   const requirementIdentity = getRequirementIdentity(detailRequirement.value)
@@ -529,33 +508,33 @@ const handleTestcaseSave = async (payload: TestCaseDetailItem) => {
     refreshOpenRequirementTestcases(requirementIdentity, payload.id)
     testcaseDetailVisible.value = false
   } catch {
-    window.alert('测试用例更新失败，请稍后重试')
+    notify({ message: '测试用例更新失败，请稍后重试', tone: 'error' })
   }
 }
 
 const handleTestcaseDelete = async (payload: TestCaseDetailItem) => {
   if (projectId.value.startsWith('local-')) {
-    window.alert('本地项目暂不支持删除测试用例')
+    notify({ message: '本地项目暂不支持删除测试用例' })
     return
   }
   if (!payload.id) {
-    window.alert('测试用例缺少可用的标识')
+    notify({ message: '测试用例缺少可用的标识', tone: 'error' })
     return
   }
-  openConfirm({
+  const confirmed = await confirm({
     title: '删除测试用例',
     message: '确定要删除该测试用例吗？删除后无法恢复。',
     confirmText: '删除',
     cancelText: '取消',
-    onConfirm: async () => {
-      try {
-        await removeTestcase(payload.id as string)
-        testcaseDetailVisible.value = false
-      } catch {
-        window.alert('测试用例删除失败，请稍后重试')
-      }
-    }
+    tone: 'danger'
   })
+  if (!confirmed) return
+  try {
+    await removeTestcase(payload.id as string)
+    testcaseDetailVisible.value = false
+  } catch {
+    notify({ message: '测试用例删除失败，请稍后重试', tone: 'error' })
+  }
 }
 
 const handleRequirementCreate = async (payload: CreateRequirementPayload) => {
@@ -568,7 +547,7 @@ const handleRequirementCreate = async (payload: CreateRequirementPayload) => {
       createRequirementVisible.value = false
       currentPage.value = Math.max(1, Math.ceil(moduleRequirements.value.length / pageSize.value))
     } else {
-      window.alert('未找到项目，无法新增需求')
+      notify({ message: '未找到项目，无法新增需求', tone: 'error' })
     }
     return
   }
@@ -577,23 +556,23 @@ const handleRequirementCreate = async (payload: CreateRequirementPayload) => {
     const result = await addRequirement(payload)
     createRequirementVisible.value = false
     currentPage.value = Math.max(1, Math.ceil(moduleRequirements.value.length / pageSize.value))
-    openConfirm({
+    const shouldGenerate = await confirm({
       title: '生成测试用例',
       message: '是否为新需求生成测试用例？',
-      confirmText: '生成',
-      onConfirm: async () => {
-        try {
-          const requirementId = result.id || result.code
-          if (requirementId) {
-            await submitGeneration([requirementId])
-          }
-        } catch {
-          window.alert('测试用例生成任务提交失败，请稍后重试')
-        }
-      }
+      confirmText: '生成'
     })
+    if (shouldGenerate) {
+      try {
+        const requirementId = result.id || result.code
+        if (requirementId) {
+          await submitGeneration([requirementId])
+        }
+      } catch {
+        notify({ message: '测试用例生成任务提交失败，请稍后重试', tone: 'error' })
+      }
+    }
   } catch {
-    window.alert('需求创建失败，请稍后重试')
+    notify({ message: '需求创建失败，请稍后重试', tone: 'error' })
   }
 }
 
@@ -607,7 +586,7 @@ const handleModuleCreate = async (nextModuleName: string) => {
       createModuleVisible.value = false
       selectModule(nextModuleName)
     } else {
-      window.alert('项目不存在或模块名已存在')
+      notify({ message: '项目不存在或模块名已存在', tone: 'error' })
     }
     return
   }
@@ -617,7 +596,7 @@ const handleModuleCreate = async (nextModuleName: string) => {
     createModuleVisible.value = false
     selectModule(result.name || nextModuleName)
   } catch {
-    window.alert('模块创建失败，请稍后重试')
+    notify({ message: '模块创建失败，请稍后重试', tone: 'error' })
   }
 }
 

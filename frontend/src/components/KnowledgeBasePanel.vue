@@ -136,7 +136,10 @@
 import { computed, ref, watch } from 'vue'
 import type { KnowledgeBaseItem, KnowledgeStatus } from '../data/knowledgeBaseStore'
 import type { ProjectRecord } from '../data/projectStore'
+import { useAppFeedback } from '../composables/useAppFeedback'
 import KnowledgeItemDialog from './KnowledgeItemDialog.vue'
+
+const { confirm } = useAppFeedback()
 
 const props = defineProps<{
   items: KnowledgeBaseItem[]
@@ -266,8 +269,13 @@ const handleDialogSubmit = (payload: {
   ])
 }
 
-const removeItem = (id: number) => {
-  const confirmed = window.confirm('确定要删除该知识条目吗？删除后无法恢复。')
+const removeItem = async (id: number) => {
+  const confirmed = await confirm({
+    title: '删除知识条目',
+    message: '确定要删除该知识条目吗？删除后无法恢复。',
+    confirmText: '删除',
+    tone: 'danger'
+  })
   if (!confirmed) {
     return
   }

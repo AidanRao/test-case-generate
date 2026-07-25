@@ -230,6 +230,7 @@
       :initial-name="dialogInitial.name"
       :initial-code="dialogInitial.code"
       :initial-modules="dialogInitial.modules"
+      :occupied-project-codes="occupiedProjectCodes"
       @submit="handleDialogSubmit"
     />
   </div>
@@ -242,13 +243,16 @@ import { Collection, FolderOpened, Setting } from '@element-plus/icons-vue'
 import KnowledgeBasePanel from '../components/KnowledgeBasePanel.vue'
 import PaginationBar from '../components/PaginationBar.vue'
 import ProjectDialog from '../components/ProjectDialog.vue'
+import { useAppFeedback } from '../composables/useAppFeedback'
 import { createProject, createTestcaseGenerationJob, deleteProject, fetchProjectList, updateProject } from '../api/projects'
 import { loadKnowledgeBase, saveKnowledgeBase, type KnowledgeBaseItem } from '../data/knowledgeBaseStore'
+import { getOccupiedProjectCodes } from '../data/projectCodeValidation'
 import { buildRequirements, loadProjects, saveProjects, type ModuleGroup, type ProjectRecord } from '../data/projectStore'
 import { loadRecentProjects, recordProjectVisit } from '../data/recentProjectStore'
 
 const router = useRouter()
 const route = useRoute()
+const { notify, confirm } = useAppFeedback()
 const portalProjectId = computed(() => typeof route.query.portal_project_id === 'string'
   ? route.query.portal_project_id
   : null)
@@ -381,6 +385,12 @@ const dialogInitial = reactive({
   code: '',
   modules: [] as ModuleGroup[]
 })
+const occupiedProjectCodes = computed(() =>
+  getOccupiedProjectCodes(
+    projects.value,
+    dialogMode.value === 'edit' ? editingProjectId.value : null
+  )
+)
 
 const openCreateDialog = () => {
   if (portalProjectId.value) {
@@ -427,7 +437,7 @@ const handleDialogSubmit = async (payload: {
           title: basePayload.name
         })
       } catch {
-        window.alert('项目更新失败，请稍后重试')
+        notify({ message: '项目更新失败，请稍后重试', tone: 'error' })
         return
       }
     }
@@ -468,11 +478,11 @@ const handleDialogSubmit = async (payload: {
     try {
       await createTestcaseGenerationJob(nextId)
     } catch {
-      window.alert('测试用例生成任务提交失败，请稍后在项目内重试')
+      notify({ message: '测试用例生成任务提交失败，请稍后在项目内重试', tone: 'error' })
     }
   }
   if (generateNow && !nextId) {
-    window.alert('项目已保存到本地，无法提交测试用例生成任务')
+    notify({ message: '项目已保存到本地，无法提交测试用例生成任务' })
   }
 }
 
@@ -486,7 +496,12 @@ const removeProject = async (project: ProjectRecord) => {
     return
   }
   const projectId = project.id
-  const confirmed = window.confirm('确定要删除该项目吗？删除后无法恢复。')
+  const confirmed = await confirm({
+    title: '删除项目',
+    message: '确定要删除该项目吗？删除后无法恢复。',
+    confirmText: '删除',
+    tone: 'danger'
+  })
   if (!confirmed) {
     return
   }
@@ -494,7 +509,7 @@ const removeProject = async (project: ProjectRecord) => {
     try {
       await deleteProject(projectId)
     } catch {
-      window.alert('删除失败，请稍后重试')
+      notify({ message: '删除失败，请稍后重试', tone: 'error' })
       return
     }
   }
