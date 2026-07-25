@@ -59,6 +59,15 @@ export type QualityInfoResponse = {
   duration: number
 }
 
+export type WordReportTemplate = {
+  template_id: string
+  name: string
+}
+
+type WordReportTemplateListResponse = {
+  list: WordReportTemplate[]
+}
+
 type DeleteProjectResponse = {
   deleted: boolean
 }
@@ -238,6 +247,13 @@ const exportTestcasesWord = async (projectId: string, templateId = 'default') =>
   return requestBlob(`/projects/${projectId}/testcases/export?${params.toString()}`)
 }
 
+const fetchWordReportTemplates = async () => {
+  const response = await requestJson<WordReportTemplateListResponse>(
+    '/testcase-report-templates'
+  )
+  return response.data.list ?? []
+}
+
 export {
   fetchProjectList,
   fetchProjectDetail,
@@ -254,5 +270,6 @@ export {
   updateTestcase,
   deleteTestcase,
   exportTestcasesExcel,
-  exportTestcasesWord
+  exportTestcasesWord,
+  fetchWordReportTemplates
 }

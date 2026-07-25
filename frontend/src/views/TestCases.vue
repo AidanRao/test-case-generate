@@ -137,7 +137,13 @@
     @delete="handleTestcaseDelete"
   />
 
-  <ExportTestcasesDialog v-model="exportDialogVisible" @export="handleExport" />
+  <ExportTestcasesDialog
+    v-model="exportDialogVisible"
+    :word-templates="wordTemplates"
+    :word-templates-loading="wordTemplatesLoading"
+    :word-templates-error="wordTemplatesError"
+    @export="handleExport"
+  />
 
 </template>
 
@@ -575,7 +581,14 @@ const nodeSizes = {
   testcase: { width: 200, height: 30 }
 }
 
-const { exportDialogVisible, openExportDialog, handleExport } = useTestcaseExport({
+const {
+  exportDialogVisible,
+  wordTemplates,
+  wordTemplatesLoading,
+  wordTemplatesError,
+  openExportDialog,
+  handleExport
+} = useTestcaseExport({
   moduleGroups,
   projectName,
   projectId,

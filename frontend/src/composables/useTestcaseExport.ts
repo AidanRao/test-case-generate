@@ -1,9 +1,13 @@
 import { ref, type ComputedRef } from 'vue'
 import type { ModuleGroup, Requirement } from '../data/projectStore'
 import type { RequirementTestCaseItem } from '../data/testcase'
-import { exportTestcasesExcel, exportTestcasesWord } from '../api/projects'
-
-export type ExportFormat = 'json' | 'md' | 'word' | 'excel'
+import {
+  exportTestcasesExcel,
+  exportTestcasesWord,
+  fetchWordReportTemplates,
+  type WordReportTemplate
+} from '../api/projects'
+import type { ExportSelection } from './wordTemplateSelection'
 
 type RequirementWithCases = Requirement & {
   testcases?: RequirementTestCaseItem[]
@@ -27,9 +31,30 @@ export const useTestcaseExport = ({
   buildTestcases
 }: UseTestcaseExportOptions) => {
   const exportDialogVisible = ref(false)
+  const wordTemplates = ref<WordReportTemplate[]>([])
+  const wordTemplatesLoading = ref(false)
+  const wordTemplatesError = ref('')
+  const wordTemplatesLoaded = ref(false)
+
+  const loadWordTemplates = async () => {
+    if (wordTemplatesLoading.value || wordTemplatesLoaded.value) {
+      return
+    }
+    wordTemplatesLoading.value = true
+    wordTemplatesError.value = ''
+    try {
+      wordTemplates.value = await fetchWordReportTemplates()
+      wordTemplatesLoaded.value = true
+    } catch {
+      wordTemplatesError.value = '模板加载失败，请重新打开弹窗重试'
+    } finally {
+      wordTemplatesLoading.value = false
+    }
+  }
 
   const openExportDialog = () => {
     exportDialogVisible.value = true
+    void loadWordTemplates()
   }
 
   const sanitizeFilename = (name: string) => name.replace(/[\\/:*?"<>|]+/g, '-')
@@ -113,7 +138,8 @@ export const useTestcaseExport = ({
     return lines.join('\n')
   }
 
-  const handleExport = async (format: ExportFormat) => {
+  const handleExport = async (selection: ExportSelection) => {
+    const { format, templateId } = selection
     const modules = buildExportModules()
     const baseName = sanitizeFilename(projectName.value || '测试用例')
     if (format === 'json') {
@@ -127,7 +153,13 @@ export const useTestcaseExport = ({
       return
     }
     if (format === 'word') {
-      const { blob, headers } = await exportTestcasesWord(projectId.value)
+      if (!templateId) {
+        return
+      }
+      const { blob, headers } = await exportTestcasesWord(
+        projectId.value,
+        templateId
+      )
       triggerBlobDownload(blob, headers, `${baseName}-测试报告.docx`)
       return
     }
@@ -137,6 +169,9 @@ export const useTestcaseExport = ({
 
   return {
     exportDialogVisible,
+    wordTemplates,
+    wordTemplatesLoading,
+    wordTemplatesError,
     openExportDialog,
     handleExport
   }
