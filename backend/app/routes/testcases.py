@@ -7,7 +7,7 @@ import random
 from app.services.project_service import ProjectService
 from app.services.testcase_service import TestCaseService
 from app.models.testcase import DEFAULT_PRIORITY, is_valid_priority, is_valid_scenario_type
-from app.reports.context_builder import build_report_context
+from app.reports.context_builder import ReportContextBuilder
 from app.reports.query_service import ReportQueryService
 from app.reports.template_registry import resolve_template
 from app.utils.generation_guard import reject_while_testcases_are_generating
@@ -208,7 +208,7 @@ def _export_testcases_word(project_id, storage, config):
     source = ReportQueryService(storage).load(project_id)
     if source is None:
         return error(40401, "资源不存在", 404)
-    context = build_report_context(source)
+    context = ReportContextBuilder().build(source)
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".docx")
     tmp.close()
     try:
