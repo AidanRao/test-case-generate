@@ -181,6 +181,19 @@
 }
 ```
 
+### Word 报告模板
+
+`GET /v1/testcase-report-templates`
+
+返回当前注册且模板文件存在的 Word 报告模板：
+
+```json
+{"code":0,"message":"ok","data":{"list":[{"template_id":"default","name":"标准测试用例文档"}]}}
+```
+
+响应不包含服务器模板路径。Word 导出时把 `template_id` 作为现有
+`GET /projects/{projectId}/testcases/export` 的查询参数。
+
 ## 质量信息
 
 | 方法 | 路径 | 说明 |

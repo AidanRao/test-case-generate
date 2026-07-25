@@ -6,6 +6,7 @@ from flask_cors import CORS
 from app.config import AppConfig
 from app.routes.projects import projects_bp
 from app.routes.quality import quality_bp
+from app.routes.report_templates import report_templates_bp
 from app.routes.requirements import requirements_bp
 from app.routes.testcases import testcases_bp
 from app.routes.ai_config import ai_config_bp
@@ -44,6 +45,7 @@ def create_app():
     app.register_blueprint(requirements_bp, url_prefix="/v1")
     app.register_blueprint(testcases_bp, url_prefix="/v1")
     app.register_blueprint(quality_bp, url_prefix="/v1")
+    app.register_blueprint(report_templates_bp, url_prefix="/v1")
     app.register_blueprint(ai_config_bp, url_prefix="/v1")
     app.register_blueprint(system_tasks_bp, url_prefix="/v1")
 
