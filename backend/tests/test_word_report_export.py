@@ -1,3 +1,4 @@
+from datetime import date
 import io
 import os
 import tempfile
@@ -15,6 +16,21 @@ WORD_MIME = (
     "application/vnd.openxmlformats-officedocument."
     "wordprocessingml.document"
 )
+
+
+def _table_for(document, headers):
+    return next(
+        table
+        for table in document.tables
+        if [cell.text for cell in table.rows[0].cells] == list(headers)
+    )
+
+
+def _table_rows(table):
+    return [
+        [cell.text for cell in row.cells]
+        for row in table.rows
+    ]
 
 
 class WordReportExportTest(unittest.TestCase):
@@ -35,6 +51,10 @@ class WordReportExportTest(unittest.TestCase):
         from app import create_app
 
         self.app = create_app()
+        report_date = patch("app.reports.context_builder.date")
+        mocked_date = report_date.start()
+        self.addCleanup(report_date.stop)
+        mocked_date.today.return_value = date(2026, 7, 25)
         self.app.testing = True
         self.client = self.app.test_client()
         response = self.client.post(
@@ -154,9 +174,13 @@ class WordReportExportTest(unittest.TestCase):
         document = Document(io.BytesIO(response.data))
         texts = [paragraph.text for paragraph in document.paragraphs]
         expected_order = [
-            "Flight 2026飞控项目测试报告",
+            "Flight 2026飞控项目测试用例文档",
+            "一、文档概述",
+            "二、需求与用例概述",
+            "三、需求与测试用例明细",
             "模块：登录 Module 1",
             "需求：用户 Login 2026",
+            "1. 正常 Login 01",
             "需求：无用例需求",
             "模块：审计",
             "需求：审计日志",
@@ -168,15 +192,27 @@ class WordReportExportTest(unittest.TestCase):
         }
         self.assertEqual(
             paragraphs_by_text["模块：登录 Module 1"].style.name,
-            "Heading 1",
-        )
-        self.assertEqual(
-            paragraphs_by_text["需求：用户 Login 2026"].style.name,
             "Heading 2",
         )
         self.assertEqual(
-            paragraphs_by_text["1. 正常 Login 01"].style.name,
+            paragraphs_by_text["需求：用户 Login 2026"].style.name,
             "Heading 3",
+        )
+        self.assertEqual(
+            paragraphs_by_text["1. 正常 Login 01"].style.name,
+            "Heading 4",
+        )
+        self.assertEqual(
+            [
+                paragraph.text
+                for paragraph in document.paragraphs
+                if paragraph.style.name == "Heading 1"
+            ],
+            [
+                "一、文档概述",
+                "二、需求与用例概述",
+                "三、需求与测试用例明细",
+            ],
         )
         self.assertTrue(
             any("$L_{stick}$" in paragraph.text for paragraph in document.paragraphs)
@@ -188,11 +224,83 @@ class WordReportExportTest(unittest.TestCase):
             any(paragraph.text == "测试步骤：暂无" for paragraph in document.paragraphs)
         )
 
-        step_table = next(
-            table
-            for table in document.tables
-            if [cell.text for cell in table.rows[0].cells]
-            == ["序号", "测试步骤", "预期结果"]
+        metadata_table = _table_for(document, ("字段", "内容"))
+        self.assertEqual(
+            _table_rows(metadata_table),
+            [
+                ["字段", "内容"],
+                ["文档名称", "Flight 2026飞控项目测试用例文档"],
+                ["项目名称", "Flight 2026飞控项目"],
+                ["文档版本", "V1.0"],
+                ["编制日期", "2026-07-25"],
+            ],
+        )
+
+        requirement_table = _table_for(
+            document,
+            ("模块", "需求编号", "需求名称", "需求类型", "用例数量"),
+        )
+        self.assertEqual(
+            [cell.text for cell in requirement_table.rows[1].cells],
+            [
+                "登录 Module 1",
+                "REQ-LOGIN-01",
+                "用户 Login 2026",
+                "功能需求",
+                "1",
+            ],
+        )
+        self.assertIs(
+            requirement_table.rows[1].cells[0]._tc,
+            requirement_table.rows[2].cells[0]._tc,
+        )
+
+        case_type_table = _table_for(
+            document,
+            ("用例类型", "用例数量", "占比"),
+        )
+        self.assertEqual(
+            _table_rows(case_type_table),
+            [
+                ["用例类型", "用例数量", "占比"],
+                ["功能测试", "2", "100.00%"],
+            ],
+        )
+        priority_table = _table_for(
+            document,
+            ("优先级", "用例数量", "占比"),
+        )
+        self.assertEqual(
+            _table_rows(priority_table),
+            [
+                ["优先级", "用例数量", "占比"],
+                ["P0", "1", "50.00%"],
+                ["P1", "1", "50.00%"],
+            ],
+        )
+
+        coverage_table = _table_for(
+            document,
+            ("需求编号", "需求名称", "关联用例", "用例数量", "覆盖状态"),
+        )
+        self.assertEqual(
+            [cell.text for cell in coverage_table.rows[2].cells],
+            ["REQ-EMPTY", "无用例需求", "暂无", "0", "未覆盖"],
+        )
+        self.assertEqual(
+            [cell.text for cell in coverage_table.rows[1].cells],
+            [
+                "REQ-LOGIN-01",
+                "用户 Login 2026",
+                "TC-LOGIN-01",
+                "1",
+                "已覆盖",
+            ],
+        )
+
+        step_table = _table_for(
+            document,
+            ("序号", "测试步骤", "预期结果"),
         )
         self.assertEqual(
             [cell.text for cell in step_table.rows[1].cells],
@@ -220,13 +328,17 @@ class WordReportExportTest(unittest.TestCase):
             ("Heading 1", "0"),
             ("Heading 2", "1"),
             ("Heading 3", "2"),
+            ("Heading 4", "3"),
         ):
             heading_style = document.styles[style_name]
             outline = heading_style._element.pPr.find(qn("w:outlineLvl"))
             self.assertIsNotNone(outline)
             self.assertEqual(outline.get(qn("w:val")), outline_level)
 
-        table = document.tables[0]
+        table = _table_for(
+            document,
+            ("序号", "测试步骤", "预期结果"),
+        )
         widths = [
             int(grid_column.get(qn("w:w")))
             for grid_column in table._tbl.tblGrid
