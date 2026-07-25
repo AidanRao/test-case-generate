@@ -192,6 +192,18 @@ class WordSectionTest(unittest.TestCase):
             )
         )
 
+    def test_all_table_text_uses_five_point_chinese_size(self):
+        for table in self.document.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for paragraph in cell.paragraphs:
+                        for run in paragraph.runs:
+                            self.assertEqual(
+                                run.font.size.pt,
+                                10.5,
+                                msg=f"表格文本未使用五号字：{run.text!r}",
+                            )
+
     def test_empty_report_keeps_headers_and_shows_no_data_messages(self):
         document = Document()
         anchor = document.add_paragraph("__ANCHOR__")

@@ -9,6 +9,7 @@ from docx.shared import Pt
 CHINESE_FONT = "宋体"
 LATIN_FONT = "Times New Roman"
 BODY_SIZE = 12
+TABLE_FONT_SIZE = 10.5
 TABLE_INDENT = 120
 TABLE_COLOR = "A6A6A6"
 HEADER_FILL = "D9EAF7"
@@ -269,7 +270,7 @@ class WordDocumentComposer:
             else WD_ALIGN_PARAGRAPH.LEFT
         )
         run = paragraph.add_run(str(text))
-        set_run_font(run, bold=bold)
+        set_run_font(run, size=TABLE_FONT_SIZE, bold=bold)
         if fill:
             cell_properties = cell._tc.get_or_add_tcPr()
             shading = cell_properties.first_child_found_in("w:shd")
