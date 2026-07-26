@@ -1,5 +1,11 @@
 import { computed, ref, type ComputedRef } from 'vue'
-import { fetchProjectDetail, fetchProjectQuality, type QualityInfoResponse } from '../api/projects'
+import {
+  fetchProjectCoverage,
+  fetchProjectDetail,
+  fetchProjectQuality,
+  type CoverageAnalysisResponse,
+  type QualityInfoResponse
+} from '../api/projects'
 import { loadProjects, type ModuleGroup, type ProjectRecord } from '../data/projectStore'
 import {
   mapRemoteModules,
@@ -29,6 +35,7 @@ export const useProjectDetail = ({
   const remoteProjectTitle = ref<string | null>(null)
   const remoteProjectSource = ref<'local' | 'uniportal' | null>(null)
   const remoteQualityInfo = ref<QualityInfoResponse | null>(null)
+  const remoteCoverageAnalysis = ref<CoverageAnalysisResponse | null>(null)
   const isLoading = ref(false)
   const loadError = ref('')
 
@@ -61,6 +68,7 @@ export const useProjectDetail = ({
     remoteProjectTitle.value = null
     remoteProjectSource.value = null
     remoteQualityInfo.value = null
+    remoteCoverageAnalysis.value = null
     loadError.value = ''
 
     if (!isRemoteProject.value) {
@@ -74,7 +82,12 @@ export const useProjectDetail = ({
       remoteProjectSource.value = detail.source
       remoteModules.value = mapRemoteModules(detail.requirements ?? [], detail.modules ?? [])
       if (includeQuality) {
-        remoteQualityInfo.value = await fetchProjectQuality(projectId.value).catch(() => null)
+        const [quality, coverage] = await Promise.all([
+          fetchProjectQuality(projectId.value).catch(() => null),
+          fetchProjectCoverage(projectId.value).catch(() => null)
+        ])
+        remoteQualityInfo.value = quality
+        remoteCoverageAnalysis.value = coverage
       }
     } catch {
       if (!currentProject.value) {
@@ -91,6 +104,7 @@ export const useProjectDetail = ({
     remoteProjectTitle,
     remoteProjectSource,
     remoteQualityInfo,
+    remoteCoverageAnalysis,
     isLoading,
     loadError,
     isRemoteProject,

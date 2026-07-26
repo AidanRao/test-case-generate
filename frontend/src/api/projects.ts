@@ -59,6 +59,75 @@ export type QualityInfoResponse = {
   duration: number
 }
 
+export type CoverageMetric = {
+  total: number
+  covered: number
+  rate: number
+}
+
+export type TestcaseEvidence = {
+  id: string
+  code: string
+  title: string
+}
+
+export type FeaturePointCoverageDetail = {
+  requirement_id: string
+  requirement_code: string
+  requirement_title: string
+  module: string
+  coverage: CoverageMetric
+  points: Array<{
+    name: string
+    covered: boolean
+    evidence_testcases: TestcaseEvidence[]
+  }>
+}
+
+export type InterfaceCoverageDetail = {
+  requirement_id: string
+  requirement_code: string
+  requirement_title: string
+  module: string
+  coverage: CoverageMetric
+  interfaces: Array<{
+    interface_name: string
+    coverage: CoverageMetric
+    parameters: Array<{
+      name: string
+      covered: boolean
+      tested_conditions: string[]
+      evidence_testcases: TestcaseEvidence[]
+    }>
+  }>
+}
+
+export type CoverageAnalysisResponse = {
+  feature_point_coverage: CoverageMetric
+  interface_coverage: CoverageMetric
+  feature_point_details: FeaturePointCoverageDetail[]
+  interface_details: InterfaceCoverageDetail[]
+  schema_version: number
+  calculated_at: string
+  duration: number
+  model: string
+}
+
+export type CoverageCalculationStatus = {
+  job_id: string | null
+  project_id: string
+  requirement_ids: string[]
+  status: 'idle' | 'pending' | 'running' | 'completed' | 'failed'
+  active: boolean
+  created_at: number | null
+  started_at: number | null
+  finished_at: number | null
+  completed_requirement_ids: string[]
+  completed_count: number
+  total_count: number
+  error: string | null
+}
+
 export type WordReportTemplate = {
   template_id: string
   name: string
@@ -149,6 +218,30 @@ const fetchProjectTestcaseGenerationStatus = async (projectId: string) => {
 
 const fetchProjectQuality = async (projectId: string) => {
   const response = await requestJson<QualityInfoResponse>(`/projects/${projectId}/quality`)
+  return response.data
+}
+
+const fetchProjectCoverage = async (projectId: string) => {
+  const response = await requestJson<CoverageAnalysisResponse | null>(
+    `/projects/${projectId}/coverage`,
+    { cache: 'no-store' }
+  )
+  return response.data
+}
+
+const calculateProjectCoverage = async (projectId: string) => {
+  const response = await requestJson<CoverageCalculationStatus>(
+    `/projects/${projectId}/coverage/calculate`,
+    { method: 'POST' }
+  )
+  return response.data
+}
+
+const fetchProjectCoverageCalculationStatus = async (projectId: string) => {
+  const response = await requestJson<CoverageCalculationStatus>(
+    `/projects/${projectId}/coverage/calculation-jobs`,
+    { cache: 'no-store' }
+  )
   return response.data
 }
 
@@ -258,6 +351,9 @@ export {
   fetchProjectList,
   fetchProjectDetail,
   fetchProjectQuality,
+  fetchProjectCoverage,
+  calculateProjectCoverage,
+  fetchProjectCoverageCalculationStatus,
   createProject,
   updateProject,
   createTestcaseGenerationJob,

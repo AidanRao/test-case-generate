@@ -13,6 +13,7 @@ from app.routes.ai_config import ai_config_bp
 from app.routes.system_tasks import system_tasks_bp
 from app.storage.json_storage import JsonStorage
 from app.scheduler import SystemTaskManager
+from app.services.coverage_job_manager import CoverageJobManager
 from app.services.testcase_job_manager import TestCaseJobManager
 
 
@@ -36,6 +37,15 @@ def create_app():
     )
     app.extensions["testcase_job_manager"] = testcase_job_manager
     atexit.register(testcase_job_manager.shutdown)
+
+    coverage_job_manager = CoverageJobManager(
+        storage,
+        app_config,
+        max_workers=app_config.coverage_job_workers,
+        max_history=app_config.coverage_job_history,
+    )
+    app.extensions["coverage_job_manager"] = coverage_job_manager
+    atexit.register(coverage_job_manager.shutdown)
 
     system_task_manager = SystemTaskManager(storage.system_task_store, storage)
     system_task_manager.start()

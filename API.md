@@ -199,8 +199,30 @@
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | `GET` | `/projects/{projectId}/quality` | 获取项目质量信息 |
+| `GET` | `/projects/{projectId}/coverage` | 获取最近一次 AI 覆盖率分析结果，尚未计算时 `data` 为 `null` |
+| `POST` | `/projects/{projectId}/coverage/calculate` | 提交功能点和接口覆盖率异步计算任务，返回 `202` |
+| `GET` | `/projects/{projectId}/coverage/calculation-jobs` | 查询项目最近一次或正在执行的覆盖率计算任务 |
+| `GET` | `/projects/{projectId}/coverage/calculation-jobs/{jobId}` | 查询指定覆盖率计算任务 |
 
 返回 `QualityInfo`。测试用例类型统计由前端根据项目详情中的测试用例计算，不由后端返回。
+
+`POST /coverage/calculate` 返回任务状态，前端可轮询
+`GET /coverage/calculation-jobs`。状态字段包括 `job_id`、`status`
+（`pending`、`running`、`completed` 或 `failed`）、`active`、
+`completed_count`、`total_count`、时间字段和 `error`。同一项目同时只允许
+一个覆盖率任务，重复提交返回 `409`。服务重启后不会恢复内存中的任务状态，
+但已经完整计算并持久化的覆盖率结果不受影响。
+
+AI 会逐条需求分析，项目结果在所有需求均成功后一次性保存。任务失败时保留
+上一次结果。结果包含
+`feature_point_coverage`、`interface_coverage`、按需求组织的对应明细、
+`calculated_at`、`duration` 与 `model`。两类汇总字段均包含 `total`、
+`covered` 和 0～1 的 `rate`。
+
+“接口覆盖率”仍按接口参数计数：测试用例明确覆盖参数的合法值、非法值或
+边界值至少一种情况时，该参数计为已覆盖。功能点和参数明细中的
+`evidence_testcases` 为测试用例引用数组，每项包含 `id`、`code` 和
+`title`；接口不保留旧字段或旧证据结构兼容。
 
 ## AI 配置
 

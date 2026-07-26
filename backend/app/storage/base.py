@@ -41,6 +41,12 @@ class StorageBackend:
     def save_project_quality(self, project_id, payload):
         raise NotImplementedError()
 
+    def get_project_coverage(self, project_id):
+        raise NotImplementedError()
+
+    def save_project_coverage(self, project_id, payload):
+        raise NotImplementedError()
+
     def add_testcases(self, project_id, requirement_id, testcases):
         raise NotImplementedError()
 

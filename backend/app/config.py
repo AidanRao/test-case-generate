@@ -21,6 +21,12 @@ class AppConfig:
         self.testcase_job_history = max(
             1, int(os.environ.get("TESTCASE_JOB_HISTORY", "1000"))
         )
+        self.coverage_job_workers = max(
+            1, int(os.environ.get("COVERAGE_JOB_WORKERS", "2"))
+        )
+        self.coverage_job_history = max(
+            1, int(os.environ.get("COVERAGE_JOB_HISTORY", "1000"))
+        )
         config_path = os.path.join(base_dir, "config.json")
         config = self._load_config(config_path)
         self.ai_model = config.get("model_name", "")

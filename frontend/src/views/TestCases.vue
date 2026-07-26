@@ -85,8 +85,14 @@
         :data="qualityInfo"
         :coverage="coverageInfo"
         :coverage-detail="coverageDetail"
+        :coverage-analysis="remoteCoverageAnalysis"
+        :coverage-calculating="coverageCalculating"
+        :coverage-calculation-status="coverageCalculationStatus"
+        :can-calculate-coverage="isRemoteProject && requirements.length > 0 && !isGenerationActive"
         :generation-status="generationStatus"
         @open-requirement="openRequirementFromCoverage"
+        @open-testcase="openEvidenceTestcase"
+        @calculate-coverage="handleCalculateCoverage"
       />
     </div>
 
@@ -169,7 +175,11 @@ import {
   type RequirementWithTestcases
 } from '../composables/useRequirementTestcases'
 import { useTestcaseExport } from '../composables/useTestcaseExport'
-import type { QualityInfoResponse } from '../api/projects'
+import {
+  type TestcaseEvidence,
+  type QualityInfoResponse
+} from '../api/projects'
+import { useCoverageCalculationJobs } from '../composables/useCoverageCalculationJobs'
 
 
 const router = useRouter()
@@ -181,6 +191,7 @@ type RequirementWithCases = RequirementWithTestcases & { module: string }
 
 const {
   remoteQualityInfo,
+  remoteCoverageAnalysis,
   isRemoteProject,
   moduleGroups,
   projectName,
@@ -198,6 +209,34 @@ const {
   fallbackToFirstProject: true,
   includeQuality: true
 })
+
+const {
+  coverageCalculationStatus,
+  isCoverageCalculating: coverageCalculating,
+  submitCoverageCalculation
+} = useCoverageCalculationJobs({
+  projectId,
+  onCompleted: (coverage) => {
+    remoteCoverageAnalysis.value = coverage
+    notify({ message: 'AI 覆盖率计算完成', tone: 'success' })
+  },
+  onFailed: (error) => {
+    const message = error === 'missing_api_key'
+      ? '请先配置 AI 服务'
+      : 'AI 覆盖率计算失败，请检查 AI 配置后重试'
+    notify({ message, tone: 'error' })
+  }
+})
+
+const handleCalculateCoverage = async () => {
+  if (!isRemoteProject.value || coverageCalculating.value) return
+  try {
+    await submitCoverageCalculation()
+    notify({ message: '覆盖率计算任务已提交' })
+  } catch {
+    notify({ message: '覆盖率计算任务提交失败，请稍后重试', tone: 'error' })
+  }
+}
 
 const requirements = computed<RequirementWithCases[]>(() => buildRequirements(moduleGroups.value) as RequirementWithCases[])
 const requirementItems = computed(() => {
@@ -319,6 +358,20 @@ const openRequirementFromCoverage = (requirement: RequirementWithCases) => {
 const openTestcaseDetail = (item: TestCaseDetailItem) => {
   testcaseDetail.value = item
   testcaseDetailVisible.value = true
+}
+
+const openEvidenceTestcase = (evidence: TestcaseEvidence) => {
+  const testcase = requirements.value
+    .flatMap((requirement) => buildTestcases(requirement))
+    .find((item) =>
+      String(item.id) === String(evidence.id)
+      || (!!evidence.code && item.code === evidence.code)
+    )
+  if (!testcase) {
+    notify({ message: '对应的测试用例已不存在，请重新计算覆盖率', tone: 'error' })
+    return
+  }
+  openTestcaseDetail(testcase)
 }
 
 const refreshOpenRequirementTestcases = (requirementIdentity: string, testcaseId?: string) => {

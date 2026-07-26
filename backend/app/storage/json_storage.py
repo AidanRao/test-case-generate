@@ -12,6 +12,7 @@ from app.storage.project_sources import (
     UNIPORTAL_SOURCE,
 )
 from app.storage.quality_store import QualityStore
+from app.storage.coverage_store import CoverageStore
 from app.storage.system_task_store import SystemTaskStore
 from app.storage.uniportal_source import UniPortalRequirementSource
 
@@ -36,6 +37,9 @@ class JsonStorage(StorageBackend):
         )
         self.quality_store = QualityStore(
             io, os.path.join(self.data_dir, "quality.json")
+        )
+        self.coverage_store = CoverageStore(
+            io, os.path.join(self.data_dir, "coverage.json")
         )
         self.requirement_store = RequirementStore(
             io, os.path.join(self.data_dir, "requirements.json"), self.project_store
@@ -201,6 +205,7 @@ class JsonStorage(StorageBackend):
                     f"deleted project_code={project_code} project_id={project_id}",
                 )
             self.quality_store.delete_by_project(project_id)
+            self.coverage_store.delete_by_project(project_id)
         self._save_sync_entries(updated_entries)
 
     def list_projects(self, keyword=None, portal_project_id=None):
@@ -283,6 +288,7 @@ class JsonStorage(StorageBackend):
             self.requirement_store.delete_by_project(project_id)
             self.testcase_store.delete_by_project(project_id)
             self.quality_store.delete_by_project(project_id)
+            self.coverage_store.delete_by_project(project_id)
         return deleted
 
     def list_requirements(self, project_id, module=None, req_type=None, keyword=None):
@@ -317,6 +323,12 @@ class JsonStorage(StorageBackend):
 
     def save_project_quality(self, project_id, payload):
         return self.quality_store.save_quality(project_id, payload)
+
+    def get_project_coverage(self, project_id):
+        return self.coverage_store.get_coverage(project_id)
+
+    def save_project_coverage(self, project_id, payload):
+        return self.coverage_store.save_coverage(project_id, payload)
 
     def add_testcases(self, project_id, requirement_id, testcases):
         return self.testcase_store.add_testcases(project_id, requirement_id, testcases)
