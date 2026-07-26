@@ -271,6 +271,7 @@ const startEdit = () => {
   draftRequirement.value = { ...props.requirement }
   requirementExpanded.value = true
   requirementContentExpanded.value = true
+  testcasesExpanded.value = false
   isEditing.value = true
 }
 

@@ -74,9 +74,9 @@
           </div>
         </div>
 
-        <div v-if="canCreate" class="border-t border-slate-100 px-4 py-3">
+        <div v-if="canCreate" class="border-t border-slate-100">
           <button
-            class="flex w-full items-center gap-2 rounded-lg border border-dashed border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-500 transition hover:border-slate-300 hover:bg-slate-50"
+            class="flex w-full items-center gap-3 px-4 py-3.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
             type="button"
             @click.stop="openCreateModule"
           >
