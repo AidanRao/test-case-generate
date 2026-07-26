@@ -52,7 +52,6 @@ class ReportContextBuilder:
         project_name = self._project_name(project)
         return {
             "metadata": {
-                "document_name": f"{project_name}测试用例文档",
                 "project_name": project_name,
                 "version": "V1.0",
                 "compiled_date": self._today_provider().isoformat(),

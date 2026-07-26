@@ -7,28 +7,34 @@ class ReportTemplateDefinition:
     template_id: str
     name: str
     filename: str
-    title_marker: str
-    body_anchor_strategy: str
+    profile_id: str
 
 
 @dataclass(frozen=True)
-class ReportTemplate:
+class ResolvedReportTemplate:
     template_id: str
     name: str
     path: str
-    title_marker: str
-    body_anchor_strategy: str
+    profile_id: str
 
 
-_TEMPLATES = {
-    "default": ReportTemplateDefinition(
-        template_id="default",
+def _build_template_index(definitions):
+    index = {definition.template_id: definition for definition in definitions}
+    if len(index) != len(definitions):
+        raise ValueError("Word 报告 template_id 不能重复")
+    return index
+
+
+_TEMPLATE_DEFINITIONS = (
+    ReportTemplateDefinition(
+        template_id="standard_test_case_word_report",
         name="标准测试用例文档",
         filename="test_case_report.docx",
-        title_marker="xx测试报告",
-        body_anchor_strategy="last_body_paragraph",
-    )
-}
+        profile_id="standard",
+    ),
+)
+
+_TEMPLATES_BY_ID = _build_template_index(_TEMPLATE_DEFINITIONS)
 
 
 def _template_path(base_dir, definition):
@@ -36,15 +42,14 @@ def _template_path(base_dir, definition):
 
 
 def resolve_template(base_dir, template_id):
-    definition = _TEMPLATES.get(template_id)
+    definition = _TEMPLATES_BY_ID.get(template_id)
     if definition is None:
         return None
-    return ReportTemplate(
+    return ResolvedReportTemplate(
         template_id=definition.template_id,
         name=definition.name,
         path=_template_path(base_dir, definition),
-        title_marker=definition.title_marker,
-        body_anchor_strategy=definition.body_anchor_strategy,
+        profile_id=definition.profile_id,
     )
 
 
@@ -54,10 +59,12 @@ def available_templates(base_dir):
             "template_id": definition.template_id,
             "name": definition.name,
         }
-        for definition in _TEMPLATES.values()
+        for definition in _TEMPLATE_DEFINITIONS
         if os.path.isfile(_template_path(base_dir, definition))
     )
 
 
 def registered_template_ids():
-    return tuple(_TEMPLATES)
+    return tuple(
+        definition.template_id for definition in _TEMPLATE_DEFINITIONS
+    )

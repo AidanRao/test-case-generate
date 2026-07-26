@@ -77,7 +77,6 @@ class ReportContextBuilderTest(unittest.TestCase):
         self.assertEqual(
             self.context["metadata"],
             {
-                "document_name": "示例系统测试用例文档",
                 "project_name": "示例系统",
                 "version": "V1.0",
                 "compiled_date": "2026-07-25",
@@ -170,10 +169,8 @@ class ReportContextBuilderTest(unittest.TestCase):
             }
         )
 
-        self.assertEqual(
-            context["metadata"]["document_name"],
-            "EMPTY测试用例文档",
-        )
+        self.assertNotIn("document_name", context["metadata"])
+        self.assertEqual(context["metadata"]["project_name"], "EMPTY")
         self.assertEqual(context["modules"], [])
         self.assertEqual(
             context["summary"],

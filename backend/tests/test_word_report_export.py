@@ -160,7 +160,7 @@ class WordReportExportTest(unittest.TestCase):
     def test_word_export_contains_report_hierarchy_and_step_table(self):
         response = self.client.get(
             f"/v1/projects/{self.project_id}/testcases/export"
-            "?format=docx&template_id=default"
+            "?format=docx&template_id=standard_test_case_word_report"
         )
         self.addCleanup(response.close)
 
@@ -313,7 +313,8 @@ class WordReportExportTest(unittest.TestCase):
 
     def test_word_structure_preserves_fonts_geometry_and_page_field(self):
         response = self.client.get(
-            f"/v1/projects/{self.project_id}/testcases/export?format=docx"
+            f"/v1/projects/{self.project_id}/testcases/export"
+            "?format=docx&template_id=standard_test_case_word_report"
         )
         self.addCleanup(response.close)
         document = Document(io.BytesIO(response.data))
@@ -372,6 +373,17 @@ class WordReportExportTest(unittest.TestCase):
             f"/v1/projects/{self.project_id}/testcases/export"
             "?format=docx&template_id=../../secret"
         )
+        missing_template = self.client.get(
+            f"/v1/projects/{self.project_id}/testcases/export?format=docx"
+        )
+        empty_template = self.client.get(
+            f"/v1/projects/{self.project_id}/testcases/export"
+            "?format=docx&template_id=%20"
+        )
+        legacy_template = self.client.get(
+            f"/v1/projects/{self.project_id}/testcases/export"
+            "?format=docx&template_id=default"
+        )
 
         self.assertEqual(missing_format.status_code, 400)
         self.assertEqual(missing_format.get_json()["code"], 40001)
@@ -379,12 +391,31 @@ class WordReportExportTest(unittest.TestCase):
         self.assertEqual(invalid_format.get_json()["code"], 40001)
         self.assertEqual(invalid_template.status_code, 400)
         self.assertEqual(invalid_template.get_json()["code"], 40001)
+        self.assertEqual(missing_template.status_code, 400)
+        self.assertEqual(missing_template.get_json()["code"], 40001)
+        self.assertEqual(empty_template.status_code, 400)
+        self.assertEqual(empty_template.get_json()["code"], 40001)
+        self.assertEqual(legacy_template.status_code, 400)
+        self.assertEqual(legacy_template.get_json()["code"], 40001)
 
     def test_template_registry_is_allowlist(self):
         config = self.app.config["APP_CONFIG"]
-        self.assertEqual(registered_template_ids(), ("default",))
-        self.assertIsNotNone(resolve_template(config.base_dir, "default"))
-        self.assertIsNone(resolve_template(config.base_dir, "../default"))
+        self.assertEqual(
+            registered_template_ids(),
+            ("standard_test_case_word_report",),
+        )
+        self.assertIsNotNone(
+            resolve_template(
+                config.base_dir,
+                "standard_test_case_word_report",
+            )
+        )
+        self.assertIsNone(
+            resolve_template(
+                config.base_dir,
+                "../standard_test_case_word_report",
+            )
+        )
 
 
 if __name__ == "__main__":

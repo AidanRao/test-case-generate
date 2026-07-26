@@ -239,7 +239,7 @@ const exportTestcasesExcel = async (projectId: string) => {
   return requestBlob(`/projects/${projectId}/testcases/export?${params.toString()}`)
 }
 
-const exportTestcasesWord = async (projectId: string, templateId = 'default') => {
+const exportTestcasesWord = async (projectId: string, templateId: string) => {
   const params = new URLSearchParams({
     format: 'docx',
     template_id: templateId

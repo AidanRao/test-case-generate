@@ -3,6 +3,7 @@ import unittest
 from docx import Document
 
 from app.reports.document import WordDocumentComposer
+from app.reports.profiles import STANDARD_WORD_REPORT_THEME
 from app.reports.sections import (
     DocumentOverviewSection,
     RequirementDetailsSection,
@@ -108,7 +109,11 @@ class WordSectionTest(unittest.TestCase):
     def setUp(self):
         self.document = Document()
         self.anchor = self.document.add_paragraph("__ANCHOR__")
-        self.composer = WordDocumentComposer(self.document, self.anchor)
+        self.composer = WordDocumentComposer(
+            self.document,
+            self.anchor,
+            STANDARD_WORD_REPORT_THEME,
+        )
         for section in (
             DocumentOverviewSection(),
             RequirementOverviewSection(),
@@ -207,7 +212,11 @@ class WordSectionTest(unittest.TestCase):
     def test_empty_report_keeps_headers_and_shows_no_data_messages(self):
         document = Document()
         anchor = document.add_paragraph("__ANCHOR__")
-        composer = WordDocumentComposer(document, anchor)
+        composer = WordDocumentComposer(
+            document,
+            anchor,
+            STANDARD_WORD_REPORT_THEME,
+        )
         context = {
             "modules": [],
             "summary": {

@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 from docx.enum.style import WD_STYLE_TYPE
 from docx.enum.table import WD_CELL_VERTICAL_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -6,39 +8,74 @@ from docx.oxml.ns import qn
 from docx.shared import Pt
 
 
-CHINESE_FONT = "宋体"
-LATIN_FONT = "Times New Roman"
-BODY_SIZE = 12
-TABLE_FONT_SIZE = 10.5
-TABLE_INDENT = 120
-TABLE_COLOR = "A6A6A6"
-HEADER_FILL = "D9EAF7"
+@dataclass(frozen=True)
+class HeadingStyle:
+    size: float
+    space_before: float
+    space_after: float
+    outline_level: int
 
 
-def set_font(element, size=BODY_SIZE, bold=None):
-    element.font.name = LATIN_FONT
+@dataclass(frozen=True)
+class CellMargins:
+    top: int
+    start: int
+    bottom: int
+    end: int
+
+
+@dataclass(frozen=True)
+class WordReportTheme:
+    chinese_font: str
+    latin_font: str
+    body_size: float
+    body_space_before: float
+    body_space_after: float
+    body_line_spacing: float
+    metadata_size: float
+    metadata_space_before: float
+    metadata_space_after: float
+    metadata_line_spacing: float
+    step_label_size: float
+    step_label_space_before: float
+    step_label_space_after: float
+    step_label_line_spacing: float
+    table_font_size: float
+    table_indent: int
+    table_border_color: str
+    table_header_fill: str
+    table_cell_margins: CellMargins
+    heading_styles: tuple[HeadingStyle, ...]
+
+    def __post_init__(self):
+        if len(self.heading_styles) != 4:
+            raise ValueError("Word 报告主题必须定义四级标题样式")
+
+
+def set_font(element, theme, size, bold=None):
+    element.font.name = theme.latin_font
     element.font.size = Pt(size)
     if bold is not None:
         element.font.bold = bold
     run_properties = element._element.get_or_add_rPr()
     fonts = run_properties.get_or_add_rFonts()
-    fonts.set(qn("w:ascii"), LATIN_FONT)
-    fonts.set(qn("w:hAnsi"), LATIN_FONT)
-    fonts.set(qn("w:cs"), LATIN_FONT)
-    fonts.set(qn("w:eastAsia"), CHINESE_FONT)
+    fonts.set(qn("w:ascii"), theme.latin_font)
+    fonts.set(qn("w:hAnsi"), theme.latin_font)
+    fonts.set(qn("w:cs"), theme.latin_font)
+    fonts.set(qn("w:eastAsia"), theme.chinese_font)
 
 
-def set_run_font(run, size=BODY_SIZE, bold=None):
-    run.font.name = LATIN_FONT
+def set_run_font(run, theme, size, bold=None):
+    run.font.name = theme.latin_font
     run.font.size = Pt(size)
     if bold is not None:
         run.bold = bold
     run_properties = run._element.get_or_add_rPr()
     fonts = run_properties.get_or_add_rFonts()
-    fonts.set(qn("w:ascii"), LATIN_FONT)
-    fonts.set(qn("w:hAnsi"), LATIN_FONT)
-    fonts.set(qn("w:cs"), LATIN_FONT)
-    fonts.set(qn("w:eastAsia"), CHINESE_FONT)
+    fonts.set(qn("w:ascii"), theme.latin_font)
+    fonts.set(qn("w:hAnsi"), theme.latin_font)
+    fonts.set(qn("w:cs"), theme.latin_font)
+    fonts.set(qn("w:eastAsia"), theme.chinese_font)
 
 
 def _clear_paragraph(paragraph):
@@ -50,6 +87,7 @@ def _clear_paragraph(paragraph):
 def _get_or_create_style(
     document,
     name,
+    theme,
     size,
     bold,
     before,
@@ -60,17 +98,17 @@ def _get_or_create_style(
         style = document.styles[name]
     except KeyError:
         style = document.styles.add_style(name, WD_STYLE_TYPE.PARAGRAPH)
-    set_font(style, size=size, bold=bold)
+    set_font(style, theme, size=size, bold=bold)
     style.paragraph_format.space_before = Pt(before)
     style.paragraph_format.space_after = Pt(after)
     style.paragraph_format.line_spacing = line_spacing
     return style
 
 
-def _configure_heading_style(style, size, before, after, outline_level):
-    set_font(style, size=size, bold=True)
-    style.paragraph_format.space_before = Pt(before)
-    style.paragraph_format.space_after = Pt(after)
+def _configure_heading_style(style, theme, definition):
+    set_font(style, theme, size=definition.size, bold=True)
+    style.paragraph_format.space_before = Pt(definition.space_before)
+    style.paragraph_format.space_after = Pt(definition.space_after)
     style.paragraph_format.line_spacing = 1.5
     style.paragraph_format.keep_with_next = True
     style.paragraph_format.keep_together = True
@@ -80,43 +118,64 @@ def _configure_heading_style(style, size, before, after, outline_level):
     if outline is None:
         outline = OxmlElement("w:outlineLvl")
         paragraph_properties.append(outline)
-    outline.set(qn("w:val"), str(outline_level))
+    outline.set(qn("w:val"), str(definition.outline_level))
 
 
-def configure_styles(document):
-    _get_or_create_style(document, "Report Body", BODY_SIZE, False, 0, 6)
+def configure_styles(document, theme):
+    _get_or_create_style(
+        document,
+        "Report Body",
+        theme,
+        theme.body_size,
+        False,
+        theme.body_space_before,
+        theme.body_space_after,
+        line_spacing=theme.body_line_spacing,
+    )
     _get_or_create_style(
         document,
         "Report Metadata",
-        BODY_SIZE,
+        theme,
+        theme.metadata_size,
         False,
-        0,
-        2,
-        line_spacing=1.15,
+        theme.metadata_space_before,
+        theme.metadata_space_after,
+        line_spacing=theme.metadata_line_spacing,
     )
-    _get_or_create_style(document, "Report Step Label", 12, True, 6, 4)
-    _configure_heading_style(document.styles["Heading 1"], 16, 12, 8, 0)
-    _configure_heading_style(document.styles["Heading 2"], 14, 10, 6, 1)
-    _configure_heading_style(document.styles["Heading 3"], 12, 8, 4, 2)
-    _configure_heading_style(document.styles["Heading 4"], 12, 6, 4, 3)
+    _get_or_create_style(
+        document,
+        "Report Step Label",
+        theme,
+        theme.step_label_size,
+        True,
+        theme.step_label_space_before,
+        theme.step_label_space_after,
+        line_spacing=theme.step_label_line_spacing,
+    )
+    for level, definition in enumerate(theme.heading_styles, start=1):
+        _configure_heading_style(
+            document.styles[f"Heading {level}"],
+            theme,
+            definition,
+        )
 
 
-def _set_cell_margins(cell, top=120, start=120, bottom=120, end=120):
+def _set_cell_margins(cell, margins):
     cell_properties = cell._tc.get_or_add_tcPr()
-    margins = cell_properties.first_child_found_in("w:tcMar")
-    if margins is None:
-        margins = OxmlElement("w:tcMar")
-        cell_properties.append(margins)
+    margins_element = cell_properties.first_child_found_in("w:tcMar")
+    if margins_element is None:
+        margins_element = OxmlElement("w:tcMar")
+        cell_properties.append(margins_element)
     for name, value in (
-        ("top", top),
-        ("start", start),
-        ("bottom", bottom),
-        ("end", end),
+        ("top", margins.top),
+        ("start", margins.start),
+        ("bottom", margins.bottom),
+        ("end", margins.end),
     ):
-        node = margins.find(qn(f"w:{name}"))
+        node = margins_element.find(qn(f"w:{name}"))
         if node is None:
             node = OxmlElement(f"w:{name}")
-            margins.append(node)
+            margins_element.append(node)
         node.set(qn("w:w"), str(value))
         node.set(qn("w:type"), "dxa")
 
@@ -132,10 +191,11 @@ def _set_cell_width(cell, width):
 
 
 class WordDocumentComposer:
-    def __init__(self, document, anchor):
+    def __init__(self, document, anchor, theme):
         self.document = document
         self.anchor = anchor
-        configure_styles(document)
+        self.theme = theme
+        configure_styles(document, theme)
 
     def add_heading(self, text, level):
         return self._add_paragraph(
@@ -159,9 +219,18 @@ class WordDocumentComposer:
             style="Report Metadata"
         )
         label_run = paragraph.add_run(f"{label}：")
-        set_run_font(label_run, bold=True)
+        set_run_font(
+            label_run,
+            self.theme,
+            size=self.theme.metadata_size,
+            bold=True,
+        )
         value_run = paragraph.add_run(str(value))
-        set_run_font(value_run)
+        set_run_font(
+            value_run,
+            self.theme,
+            size=self.theme.metadata_size,
+        )
         return paragraph
 
     def add_table(
@@ -190,7 +259,7 @@ class WordDocumentComposer:
                 header,
                 bold=True,
                 centered=True,
-                fill=HEADER_FILL,
+                fill=self.theme.table_header_fill,
             )
         header_properties = table.rows[0]._tr.get_or_add_trPr()
         header_properties.append(OxmlElement("w:tblHeader"))
@@ -245,14 +314,14 @@ class WordDocumentComposer:
         size = (
             paragraph.style.font.size.pt
             if paragraph.style.font.size
-            else BODY_SIZE
+            else self.theme.body_size
         )
-        set_run_font(run, size=size)
+        set_run_font(run, self.theme, size=size)
         paragraph.paragraph_format.keep_with_next = keep_with_next
         return paragraph
 
-    @staticmethod
     def _format_cell(
+        self,
         cell,
         text,
         bold=False,
@@ -270,7 +339,12 @@ class WordDocumentComposer:
             else WD_ALIGN_PARAGRAPH.LEFT
         )
         run = paragraph.add_run(str(text))
-        set_run_font(run, size=TABLE_FONT_SIZE, bold=bold)
+        set_run_font(
+            run,
+            self.theme,
+            size=self.theme.table_font_size,
+            bold=bold,
+        )
         if fill:
             cell_properties = cell._tc.get_or_add_tcPr()
             shading = cell_properties.first_child_found_in("w:shd")
@@ -279,8 +353,7 @@ class WordDocumentComposer:
                 cell_properties.append(shading)
             shading.set(qn("w:fill"), fill)
 
-    @staticmethod
-    def _set_table_geometry(table, widths):
+    def _set_table_geometry(self, table, widths):
         table.autofit = False
         table_properties = table._tbl.tblPr
         table_width = table_properties.first_child_found_in("w:tblW")
@@ -297,7 +370,7 @@ class WordDocumentComposer:
         if indent is None:
             indent = OxmlElement("w:tblInd")
             table_properties.append(indent)
-        indent.set(qn("w:w"), str(TABLE_INDENT))
+        indent.set(qn("w:w"), str(self.theme.table_indent))
         indent.set(qn("w:type"), "dxa")
 
         for grid_column, width in zip(table._tbl.tblGrid, widths):
@@ -322,7 +395,7 @@ class WordDocumentComposer:
             node.set(qn("w:val"), "single")
             node.set(qn("w:sz"), "4")
             node.set(qn("w:space"), "0")
-            node.set(qn("w:color"), TABLE_COLOR)
+            node.set(qn("w:color"), self.theme.table_border_color)
 
         for row in table.rows:
             row_properties = row._tr.get_or_add_trPr()
@@ -330,5 +403,8 @@ class WordDocumentComposer:
                 row_properties.append(OxmlElement("w:cantSplit"))
             for cell, width in zip(row.cells, widths):
                 _set_cell_width(cell, width)
-                _set_cell_margins(cell)
+                _set_cell_margins(
+                    cell,
+                    self.theme.table_cell_margins,
+                )
                 cell.vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER

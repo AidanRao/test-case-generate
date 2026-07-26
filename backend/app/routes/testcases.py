@@ -200,7 +200,7 @@ def _export_testcases_excel(project_id, project, storage, config):
 
 
 def _export_testcases_word(project_id, storage, config):
-    template_id = (request.args.get("template_id") or "default").strip()
+    template_id = (request.args.get("template_id") or "").strip()
     template = resolve_template(config.base_dir, template_id)
     if template is None:
         return error(40001, "template_id 参数不合法", 400)
@@ -213,6 +213,10 @@ def _export_testcases_word(project_id, storage, config):
     tmp.close()
     try:
         from app.reports.renderer import ReportRenderError, WordReportRenderer
+        from app.reports.profiles import (
+            ReportProfileConfigurationError,
+            resolve_report_profile,
+        )
     except ModuleNotFoundError:
         current_app.logger.exception("Failed to render Word test report")
         try:
@@ -221,8 +225,14 @@ def _export_testcases_word(project_id, storage, config):
             pass
         return error(50001, "生成 Word 测试报告失败", 500)
     try:
-        WordReportRenderer().render(context, template, tmp.name)
-    except (ReportRenderError, OSError, ValueError):
+        profile = resolve_report_profile(template.profile_id)
+        WordReportRenderer(profile).render(context, template, tmp.name)
+    except (
+        ReportProfileConfigurationError,
+        ReportRenderError,
+        OSError,
+        ValueError,
+    ):
         current_app.logger.exception("Failed to render Word test report")
         try:
             os.remove(tmp.name)

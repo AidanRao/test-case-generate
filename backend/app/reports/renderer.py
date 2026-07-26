@@ -6,14 +6,11 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docxtpl import DocxTemplate
 
-from app.reports.document import WordDocumentComposer, set_run_font
-from app.reports.sections import (
-    DocumentOverviewSection,
-    RequirementDetailsSection,
-    RequirementOverviewSection,
-)
+from app.reports.document import WordDocumentComposer
 
 
+DOCUMENT_TITLE_PLACEHOLDER = "{{ document_title }}"
+BODY_ANCHOR_PLACEHOLDER = "{{ body_anchor }}"
 BODY_ANCHOR = "__TEST_CASE_REPORT_BODY__"
 
 
@@ -21,33 +18,25 @@ class ReportRenderError(RuntimeError):
     pass
 
 
-def _clear_paragraph(paragraph):
-    for child in list(paragraph._p):
-        if child.tag != qn("w:pPr"):
-            paragraph._p.remove(child)
-
-
-def _prepare_template(source_path, output_path, title_marker):
-    document = Document(source_path)
-    title_paragraph = next(
-        (
+def _validate_template_contract(template_path):
+    document = Document(template_path)
+    for placeholder, label in (
+        (DOCUMENT_TITLE_PLACEHOLDER, "文档标题"),
+        (BODY_ANCHOR_PLACEHOLDER, "正文锚点"),
+    ):
+        matches = [
             paragraph
             for paragraph in document.paragraphs
-            if paragraph.text == title_marker
-        ),
-        None,
-    )
-    if title_paragraph is None or not title_paragraph.runs:
-        raise ReportRenderError("Word 模板缺少封面标题标记")
-    _clear_paragraph(title_paragraph)
-    title_paragraph.add_run("{{ document_title }}")
-
-    if not document.paragraphs:
-        raise ReportRenderError("Word 模板缺少正文锚点")
-    body_anchor = document.paragraphs[-1]
-    _clear_paragraph(body_anchor)
-    body_anchor.add_run("{{ body_anchor }}")
-    document.save(output_path)
+            if paragraph.text == placeholder
+        ]
+        if (
+            len(matches) != 1
+            or len(matches[0].runs) != 1
+            or matches[0].runs[0].text != placeholder
+        ):
+            raise ReportRenderError(
+                f"Word 模板必须用独立段落和单一文本块定义{label}占位符"
+            )
 
 
 def _enable_field_updates(document):
@@ -59,33 +48,43 @@ def _enable_field_updates(document):
     update_fields.set(qn("w:val"), "true")
 
 
+def _render_context(context, document_title):
+    result = dict(context)
+    metadata = dict(context["metadata"])
+    metadata["document_name"] = document_title
+    result["metadata"] = metadata
+    return result
+
+
 class WordReportRenderer:
-    def __init__(self, sections=None):
-        self._sections = tuple(
-            sections
-            if sections is not None
-            else (
-                DocumentOverviewSection(),
-                RequirementOverviewSection(),
-                RequirementDetailsSection(),
-            )
-        )
+    def __init__(self, profile):
+        self._profile = profile
 
     def render(self, context, template, output_path):
         if not os.path.isfile(template.path):
             raise ReportRenderError("Word 模板不存在")
 
+        _validate_template_contract(template.path)
+        document_title = self._profile.document_title(context)
+        context = _render_context(context, document_title)
+
         with tempfile.TemporaryDirectory(
             prefix="test-report-render-"
         ) as temp_dir:
-            rendered_path = self._render_shell(context, template, temp_dir)
+            rendered_path = self._render_shell(
+                template.path,
+                document_title,
+                temp_dir,
+            )
             document = Document(rendered_path)
             anchor = self._find_anchor(document)
-            composer = WordDocumentComposer(document, anchor)
+            composer = WordDocumentComposer(
+                document,
+                anchor,
+                self._profile.theme,
+            )
 
-            document_title = context["metadata"]["document_name"]
-            self._format_cover_title(document, document_title)
-            for section in self._sections:
+            for section in self._profile.create_sections():
                 section.render(composer, context)
 
             anchor._element.getparent().remove(anchor._element)
@@ -94,19 +93,12 @@ class WordReportRenderer:
             document.save(output_path)
 
     @staticmethod
-    def _render_shell(context, template, temp_dir):
-        prepared_path = os.path.join(temp_dir, "prepared.docx")
+    def _render_shell(template_path, document_title, temp_dir):
         rendered_path = os.path.join(temp_dir, "rendered.docx")
-        _prepare_template(
-            template.path,
-            prepared_path,
-            template.title_marker,
-        )
-
-        doc_template = DocxTemplate(prepared_path)
+        doc_template = DocxTemplate(template_path)
         doc_template.render(
             {
-                "document_title": context["metadata"]["document_name"],
+                "document_title": document_title,
                 "body_anchor": BODY_ANCHOR,
             },
             autoescape=True,
@@ -116,29 +108,11 @@ class WordReportRenderer:
 
     @staticmethod
     def _find_anchor(document):
-        anchor = next(
-            (
-                paragraph
-                for paragraph in document.paragraphs
-                if paragraph.text == BODY_ANCHOR
-            ),
-            None,
-        )
-        if anchor is None:
+        matches = [
+            paragraph
+            for paragraph in document.paragraphs
+            if paragraph.text == BODY_ANCHOR
+        ]
+        if len(matches) != 1:
             raise ReportRenderError("Word 模板正文锚点渲染失败")
-        return anchor
-
-    @staticmethod
-    def _format_cover_title(document, document_title):
-        title = next(
-            (
-                paragraph
-                for paragraph in document.paragraphs
-                if paragraph.text == document_title
-            ),
-            None,
-        )
-        if title is None:
-            return
-        for run in title.runs:
-            set_run_font(run, size=24, bold=True)
+        return matches[0]
