@@ -4,8 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vue-tsc -b && vite build",
+    "dev": "concurrently --kill-others-on-fail --names app,docs \"vite --port 5173 --strictPort\" \"vitepress dev docs --port 5174 --strictPort\"",
+    "dev:app": "vite --port 5173 --strictPort",
+    "docs:dev": "vitepress dev docs --port 5174 --strictPort",
+    "build": "vue-tsc -b && vite build && vitepress build docs",
+    "docs:build": "vitepress build docs",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -30,10 +33,12 @@
     "@vitejs/plugin-vue": "^5.1.0",
     "@vue/tsconfig": "^0.8.1",
     "autoprefixer": "^10.4.24",
+    "concurrently": "^9.2.1",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.9.3",
     "vite": "^5.4.0",
+    "vitepress": "^1.6.4",
     "vue-tsc": "^3.1.4"
   }
 }

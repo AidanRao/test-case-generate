@@ -4,6 +4,14 @@ import vue from '@vitejs/plugin-vue'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [vue()],
+  server: {
+    proxy: {
+      '/docs': {
+        target: 'http://127.0.0.1:5174',
+        ws: true,
+      },
+    },
+  },
   build: {
     rollupOptions: {
       output: {

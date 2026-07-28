@@ -6,3 +6,6 @@
 .vscode
 
 docs
+!frontend/docs/
+!frontend/docs/**
+frontend/docs/.vitepress/cache/

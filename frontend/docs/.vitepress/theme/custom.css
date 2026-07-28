@@ -1,0 +1,95 @@
+:root {
+  --vp-c-brand-1: #0284c7;
+  --vp-c-brand-2: #0369a1;
+  --vp-c-brand-3: #0ea5e9;
+  --vp-c-brand-soft: rgb(14 165 233 / 12%);
+  --vp-c-bg-alt: #f8fafc;
+  --vp-c-bg-soft: #f8fafc;
+  --vp-c-bg-mute: #f1f5f9;
+  --vp-c-divider: #e2e8f0;
+  --vp-c-border: #e2e8f0;
+  --vp-font-family-base:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "PingFang SC",
+    "Microsoft YaHei",
+    sans-serif;
+}
+
+.dark {
+  --vp-c-bg-alt: #0f172a;
+  --vp-c-bg-soft: #172033;
+  --vp-c-bg-mute: #1e293b;
+  --vp-c-divider: #263449;
+  --vp-c-border: #334155;
+}
+
+.VPNavBar {
+  border-bottom-color: rgb(148 163 184 / 20%);
+}
+
+.VPNavBarTitle .title {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.app-return-link {
+  display: inline-flex;
+  height: 34px;
+  margin-left: 12px;
+  padding: 0 14px;
+  align-items: center;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 10px;
+  color: var(--vp-c-text-2);
+  font-size: 13px;
+  font-weight: 600;
+  transition:
+    border-color 0.2s,
+    color 0.2s,
+    background-color 0.2s;
+}
+
+.app-return-link:hover {
+  border-color: var(--vp-c-brand-1);
+  background: var(--vp-c-brand-soft);
+  color: var(--vp-c-brand-1);
+}
+
+.vp-doc {
+  font-size: 15px;
+}
+
+.vp-doc p,
+.vp-doc li {
+  line-height: 1.85;
+}
+
+.vp-doc h1 {
+  letter-spacing: -0.025em;
+}
+
+.vp-doc h2 {
+  border-top: 0;
+}
+
+.vp-doc div[class*="language-"],
+.vp-doc table {
+  border-radius: 12px;
+}
+
+.VPHomeHero .name,
+.VPHomeHero .text {
+  letter-spacing: -0.03em;
+}
+
+@media (max-width: 767px) {
+  .app-return-link {
+    margin-left: 8px;
+    padding: 0 10px;
+  }
+}

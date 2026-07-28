@@ -99,14 +99,24 @@
                 知识库管理
               </button>
             </div>
-            <button
-              class="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
-              type="button"
-              @click="goToSettings"
-            >
-              <el-icon class="text-base"><Setting /></el-icon>
-              系统设置
-            </button>
+            <div class="flex items-center gap-2">
+              <button
+                class="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+                type="button"
+                @click="goToDocumentation"
+              >
+                <el-icon class="text-base"><Reading /></el-icon>
+                使用文档
+              </button>
+              <button
+                class="flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
+                type="button"
+                @click="goToSettings"
+              >
+                <el-icon class="text-base"><Setting /></el-icon>
+                系统设置
+              </button>
+            </div>
           </div>
 
           <div v-if="activeSection === 'projects'" class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -239,7 +249,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { Collection, FolderOpened, Setting } from '@element-plus/icons-vue'
+import { Collection, FolderOpened, Reading, Setting } from '@element-plus/icons-vue'
 import KnowledgeBasePanel from '../components/KnowledgeBasePanel.vue'
 import PaginationBar from '../components/PaginationBar.vue'
 import ProjectDialog from '../components/ProjectDialog.vue'
@@ -532,6 +542,10 @@ const goToSettings = () => {
     name: 'settings',
     query: portalProjectId.value ? { portal_project_id: portalProjectId.value } : {}
   })
+}
+
+const goToDocumentation = () => {
+  window.location.assign(`${import.meta.env.BASE_URL}docs/`)
 }
 
 const formatDate = (value: string) => {
