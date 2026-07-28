@@ -90,7 +90,7 @@
                   <el-icon class="h-4 w-4 text-rose-500"><CircleClose /></el-icon>
                   两端连接失败
                 </span>
-                <span v-else>测试前端与后端连接</span>
+                <span v-else>测试连接</span>
               </button>
               <button
                 class="rounded-xl border border-slate-200 px-6 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50"
