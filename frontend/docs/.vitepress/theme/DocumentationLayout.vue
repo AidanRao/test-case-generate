@@ -1,27 +1,25 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
 import DefaultTheme from 'vitepress/theme'
 
 const { Layout } = DefaultTheme
-const appHomeUrl = ref('/projects')
 
-onMounted(() => {
-  if (!import.meta.env.DEV || window.location.port !== '5174') {
-    return
+const returnToApp = () => {
+  const appUrl = new URL('/projects', window.location.origin)
+
+  if (import.meta.env.DEV && window.location.port === '5174') {
+    appUrl.port = '5173'
   }
 
-  const appUrl = new URL('/projects', window.location.origin)
-  appUrl.port = '5173'
-  appHomeUrl.value = appUrl.toString()
-})
+  window.location.assign(appUrl.toString())
+}
 </script>
 
 <template>
   <Layout>
     <template #nav-bar-content-after>
-      <a class="app-return-link" :href="appHomeUrl">
+      <button class="app-return-link" type="button" @click="returnToApp">
         返回应用
-      </a>
+      </button>
     </template>
   </Layout>
 </template>

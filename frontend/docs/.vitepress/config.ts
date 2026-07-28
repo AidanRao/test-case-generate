@@ -6,7 +6,8 @@ export default defineConfig({
   description: '测试用例智能生成工具使用文档',
   base: '/docs/',
   cleanUrls: true,
-  lastUpdated: true,
+  // Docker 构建镜像中不包含 Git，关闭基于提交记录的更新时间计算。
+  lastUpdated: false,
   outDir: '../dist/docs',
 
   head: [
@@ -63,13 +64,6 @@ export default defineConfig({
     docFooter: {
       prev: '上一篇',
       next: '下一篇',
-    },
-    lastUpdated: {
-      text: '最后更新于',
-      formatOptions: {
-        dateStyle: 'medium',
-        timeStyle: 'short',
-      },
     },
     darkModeSwitchLabel: '外观',
     lightModeSwitchTitle: '切换到浅色模式',
