@@ -3,7 +3,7 @@
     <div class="flex items-center justify-between border-b border-slate-100 px-5 py-3.5">
       <h2 class="text-base font-semibold text-slate-800">质量信息</h2>
       <GenerationStatusBadge
-        v-if="generationStatus"
+        v-if="generationStatus && generationStatus.status !== 'idle'"
         class="px-3 py-1"
         :active="generationStatus.active"
         :label="statusText"
@@ -224,11 +224,12 @@ const statusText = computed(() => {
   }
   if (props.generationStatus.status === 'completed') return '测试用例生成完成'
   if (props.generationStatus.status === 'failed') return '测试用例生成失败'
-  return '暂无生成任务'
+  return ''
 })
 
 const statusTone = computed<'warning' | 'success' | 'danger' | 'neutral'>(() => {
   if (!props.generationStatus) return 'neutral'
+  if (props.generationStatus.status === 'pending') return 'neutral'
   if (props.generationStatus.active) return 'warning'
   if (props.generationStatus.status === 'completed') return 'success'
   if (props.generationStatus.status === 'failed') return 'danger'
