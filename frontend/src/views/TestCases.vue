@@ -127,6 +127,7 @@
     :requirement="detailRequirement"
     :testcases="detailTestcases"
     :is-generating="detailRequirementGenerating"
+    :is-waiting="detailRequirementWaiting"
     :generation-disabled="isGenerationActive"
     :read-only="isReadOnlyProject || isGenerationActive"
     @open-testcase="openTestcaseDetail"
@@ -197,7 +198,8 @@ const {
   projectName,
   isReadOnlyProject,
   generationStatus,
-  activeRequirementIds,
+  processingRequirementIds,
+  waitingRequirementIds,
   isGenerationActive,
   submitGeneration,
   saveRequirement,
@@ -246,7 +248,11 @@ const requirementItems = computed(() => {
     return {
       ...item,
       testcaseCount,
-      isGenerating: activeRequirementIds.value.has(requirementId)
+      generationState: processingRequirementIds.value.has(requirementId)
+        ? 'processing' as const
+        : waitingRequirementIds.value.has(requirementId)
+          ? 'waiting' as const
+          : undefined
     }
   })
 })
@@ -318,7 +324,13 @@ const detailRequirementGenerating = computed(() => {
   const requirement = detailRequirement.value
   if (!requirement) return false
   const requirementId = String(requirement.ID || requirement.code || requirement.title)
-  return activeRequirementIds.value.has(requirementId)
+  return processingRequirementIds.value.has(requirementId)
+})
+const detailRequirementWaiting = computed(() => {
+  const requirement = detailRequirement.value
+  if (!requirement) return false
+  const requirementId = String(requirement.ID || requirement.code || requirement.title)
+  return waitingRequirementIds.value.has(requirementId)
 })
 
 const testcaseDetail = ref<TestCaseDetailItem | null>(null)

@@ -10,4 +10,5 @@ services:
     environment:
       - UNIPORTAL_SYNC_ENABLED=false
       - DATA_DIR=/app/data
+      - TESTCASE_REQUIREMENT_WORKERS=${TESTCASE_REQUIREMENT_WORKERS:-2}
     restart: unless-stopped

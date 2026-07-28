@@ -9,7 +9,15 @@
       <span class="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-600">
         {{ requirement.type || '未分类' }}
       </span>
-      <GenerationStatusBadge v-if="isGenerating" active />
+      <GenerationStatusBadge
+        v-if="generationState === 'processing'"
+        active
+        label="生成中"
+      />
+      <GenerationStatusBadge
+        v-else-if="generationState === 'waiting'"
+        label="等待中"
+      />
       <span v-else class="rounded-full bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700">
         测试用例数 {{ testcaseCount }}
       </span>
@@ -33,11 +41,10 @@ withDefaults(defineProps<{
   requirement: RequirementCardItem
   identifier: string
   testcaseCount?: number
-  isGenerating?: boolean
+  generationState?: 'processing' | 'waiting'
   selected?: boolean
 }>(), {
   testcaseCount: 0,
-  isGenerating: false,
   selected: false
 })
 

@@ -365,46 +365,40 @@ def integration_generate_testcases():
             return error(50001, "创建项目失败", 500)
         stored_requirements = storage.list_requirements(project_id) or []
         requirements_by_id = {str(item.get("id")): item for item in stored_requirements}
-        for req in stored_requirements:
+        generation_results = service.iter_requirement_cases(
+            stored_requirements,
+            generator=generator,
+            include_module_info=True,
+        )
+        for generation_result in generation_results:
+            req = generation_result.requirement
             req_id = req.get("id")
-            req_type = service._map_req_type(req.get("type"))
-            raw_cases = generator.generate_test_cases(
-                req.get("content", ""),
-                req_id,
-                req.get("title", ""),
-                req_type=req_type,
-                module_info=req.get("module"),
+            if generation_result.error:
+                fail_count += 1
+                continue
+            mapped = service._map_cases(
+                project_id,
+                req,
+                generation_result.raw_cases,
             )
-            if raw_cases is None:
-                fail_count += 1
-                continue
-            if not service.has_valid_scenarios(raw_cases):
-                fail_count += 1
-                continue
-            mapped = service._map_cases(project_id, req, raw_cases)
             storage.add_testcases(project_id, req_id, mapped)
             results.extend(mapped)
     else:
         requirements_by_id = {str(item.get("id")): item for item in flat_requirements}
         base_seq = 1
         project_code = "INTEGRATION"
-        for req in flat_requirements:
+        generation_results = service.generate_requirement_cases(
+            flat_requirements,
+            generator=generator,
+            include_module_info=True,
+        )
+        for generation_result in generation_results:
+            req = generation_result.requirement
             req_id = req.get("id")
-            req_type = service._map_req_type(req.get("type"))
-            raw_cases = generator.generate_test_cases(
-                req.get("content", ""),
-                req_id,
-                req.get("title", ""),
-                req_type=req_type,
-                module_info=req.get("module"),
-            )
-            if raw_cases is None:
+            if generation_result.error:
                 fail_count += 1
                 continue
-            if not service.has_valid_scenarios(raw_cases):
-                fail_count += 1
-                continue
-            for case in raw_cases:
+            for case in generation_result.raw_cases:
                 seq = str(base_seq).zfill(3)
                 base_seq += 1
                 case_title = case.get("title") or f"{req.get('title', '')}-用例{seq}"

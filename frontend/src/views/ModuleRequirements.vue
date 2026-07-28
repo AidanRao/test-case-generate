@@ -106,7 +106,7 @@
                 <td class="px-4 py-5">
                   <span
                     class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold"
-                    :class="isRequirementGenerating(item) ? 'bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20' : getTestcaseCount(item) > 0 ? 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20' : 'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-500/10'"
+                    :class="isRequirementGenerating(item) ? 'bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20' : isRequirementWaiting(item) ? 'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-500/10' : getTestcaseCount(item) > 0 ? 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20' : 'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-500/10'"
                   >
                     {{ formatTestcaseCount(item) }}
                   </span>
@@ -167,6 +167,7 @@
       :requirement="detailRequirement"
       :testcases="detailTestcases"
       :is-generating="detailRequirementGenerating"
+      :is-waiting="detailRequirementWaiting"
       :generation-disabled="isGenerationActive"
       :read-only="isReadOnlyProject || isGenerationActive"
       @open-testcase="openTestcaseDetail"
@@ -224,7 +225,8 @@ const {
   isReadOnlyProject,
   isLoading,
   loadError,
-  activeRequirementIds,
+  processingRequirementIds,
+  waitingRequirementIds,
   isGenerationActive,
   submitGeneration,
   saveRequirement,
@@ -250,7 +252,11 @@ const currentPage = ref(1)
 const pageSize = ref(5)
 const detailRequirementGenerating = computed(() => {
   const requirementId = getRequirementIdentity(detailRequirement.value)
-  return Boolean(requirementId && activeRequirementIds.value.has(requirementId))
+  return Boolean(requirementId && processingRequirementIds.value.has(requirementId))
+})
+const detailRequirementWaiting = computed(() => {
+  const requirementId = getRequirementIdentity(detailRequirement.value)
+  return Boolean(requirementId && waitingRequirementIds.value.has(requirementId))
 })
 
 const moduleOptions = computed(() => {
@@ -286,10 +292,14 @@ const getRequirementKey = (item: Requirement, index: number) =>
 const getTestcaseCount = (item: PageRequirement) => buildTestcases(item).length
 
 const isRequirementGenerating = (item: PageRequirement) =>
-  activeRequirementIds.value.has(getRequirementIdentity(item))
+  processingRequirementIds.value.has(getRequirementIdentity(item))
+
+const isRequirementWaiting = (item: PageRequirement) =>
+  waitingRequirementIds.value.has(getRequirementIdentity(item))
 
 const formatTestcaseCount = (item: PageRequirement) => {
   if (isRequirementGenerating(item)) return '生成中'
+  if (isRequirementWaiting(item)) return '等待中'
   const count = getTestcaseCount(item)
   return count > 0 ? `${count} 条` : '未生成'
 }

@@ -19,8 +19,9 @@ class TestCaseGenerationJob:
     created_at: float = field(default_factory=time.time)
     started_at: float | None = None
     finished_at: float | None = None
-    current_requirement_id: str | None = None
+    processing_requirement_ids: list[str] = field(default_factory=list)
     completed_requirement_ids: list[str] = field(default_factory=list)
+    failed_requirement_ids: list[str] = field(default_factory=list)
     error: str | None = None
 
     @property
@@ -29,11 +30,14 @@ class TestCaseGenerationJob:
 
     def to_dict(self):
         completed_ids = set(self.completed_requirement_ids)
+        failed_ids = set(self.failed_requirement_ids)
+        processing_ids = set(self.processing_requirement_ids)
         active_requirement_ids = (
             [
                 requirement_id
                 for requirement_id in self.requirement_ids
                 if requirement_id not in completed_ids
+                and requirement_id not in failed_ids
             ]
             if self.active
             else []
@@ -48,9 +52,19 @@ class TestCaseGenerationJob:
             "created_at": self.created_at,
             "started_at": self.started_at,
             "finished_at": self.finished_at,
-            "current_requirement_id": self.current_requirement_id,
+            "processing_requirement_ids": [
+                requirement_id
+                for requirement_id in self.requirement_ids
+                if requirement_id in processing_ids
+            ],
             "completed_requirement_ids": list(self.completed_requirement_ids),
+            "failed_requirement_ids": list(self.failed_requirement_ids),
             "completed_count": len(self.completed_requirement_ids),
+            "failed_count": len(self.failed_requirement_ids),
+            "processed_count": (
+                len(self.completed_requirement_ids)
+                + len(self.failed_requirement_ids)
+            ),
             "total_count": len(self.requirement_ids),
             "error": self.error,
         }
@@ -141,9 +155,12 @@ class TestCaseJobManager:
                 "created_at": None,
                 "started_at": None,
                 "finished_at": None,
-                "current_requirement_id": None,
+                "processing_requirement_ids": [],
                 "completed_requirement_ids": [],
+                "failed_requirement_ids": [],
                 "completed_count": 0,
+                "failed_count": 0,
+                "processed_count": 0,
                 "total_count": 0,
                 "error": None,
             }
@@ -171,7 +188,13 @@ class TestCaseJobManager:
                 on_requirement_started=lambda requirement_id: self._mark_requirement_started(
                     job_id, requirement_id
                 ),
+                on_requirement_finished=lambda requirement_id: self._mark_requirement_finished(
+                    job_id, requirement_id
+                ),
                 on_requirement_completed=lambda requirement_id: self._mark_requirement_completed(
+                    job_id, requirement_id
+                ),
+                on_requirement_failed=lambda requirement_id: self._mark_requirement_failed(
                     job_id, requirement_id
                 ),
             )
@@ -191,10 +214,24 @@ class TestCaseJobManager:
             job.started_at = time.time()
 
     def _mark_requirement_started(self, job_id, requirement_id):
+        requirement_id = str(requirement_id)
         with self._lock:
             job = self._jobs.get(job_id)
-            if job and job.active:
-                job.current_requirement_id = str(requirement_id)
+            if (
+                job
+                and job.active
+                and requirement_id not in job.processing_requirement_ids
+            ):
+                job.processing_requirement_ids.append(requirement_id)
+
+    def _mark_requirement_finished(self, job_id, requirement_id):
+        requirement_id = str(requirement_id)
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if not job or not job.active:
+                return
+            if requirement_id in job.processing_requirement_ids:
+                job.processing_requirement_ids.remove(requirement_id)
 
     def _mark_requirement_completed(self, job_id, requirement_id):
         requirement_id = str(requirement_id)
@@ -202,17 +239,36 @@ class TestCaseJobManager:
             job = self._jobs.get(job_id)
             if not job or not job.active:
                 return
+            if requirement_id in job.processing_requirement_ids:
+                job.processing_requirement_ids.remove(requirement_id)
             if requirement_id not in job.completed_requirement_ids:
                 job.completed_requirement_ids.append(requirement_id)
+
+    def _mark_requirement_failed(self, job_id, requirement_id):
+        requirement_id = str(requirement_id)
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if not job or not job.active:
+                return
+            if requirement_id in job.processing_requirement_ids:
+                job.processing_requirement_ids.remove(requirement_id)
+            if requirement_id not in job.failed_requirement_ids:
+                job.failed_requirement_ids.append(requirement_id)
 
     def _finish(self, job_id, status, error=None):
         with self._lock:
             job = self._jobs.get(job_id)
             if not job:
                 return
+            if status == "failed":
+                processed_ids = set(job.completed_requirement_ids)
+                processed_ids.update(job.failed_requirement_ids)
+                for requirement_id in job.requirement_ids:
+                    if requirement_id not in processed_ids:
+                        job.failed_requirement_ids.append(requirement_id)
             job.status = status
             job.error = error
-            job.current_requirement_id = None
+            job.processing_requirement_ids.clear()
             job.finished_at = time.time()
             if self._active_job_by_project.get(job.project_id) == job.id:
                 self._active_job_by_project.pop(job.project_id, None)

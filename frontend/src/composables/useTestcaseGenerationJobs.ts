@@ -22,6 +22,17 @@ export const useTestcaseGenerationJobs = ({
   const activeRequirementIds = computed(
     () => new Set(generationStatus.value?.active_requirement_ids ?? [])
   )
+  const processingRequirementIds = computed(
+    () => new Set(generationStatus.value?.processing_requirement_ids ?? [])
+  )
+  const waitingRequirementIds = computed(() => {
+    const processingIds = processingRequirementIds.value
+    return new Set(
+      Array.from(activeRequirementIds.value).filter(
+        (requirementId) => !processingIds.has(requirementId)
+      )
+    )
+  })
   const isGenerationActive = computed(() => generationStatus.value?.active === true)
 
   const stopPolling = () => {
@@ -84,6 +95,8 @@ export const useTestcaseGenerationJobs = ({
   return {
     generationStatus,
     activeRequirementIds,
+    processingRequirementIds,
+    waitingRequirementIds,
     isGenerationActive,
     refreshGenerationStatus: refreshStatus,
     submitGeneration,

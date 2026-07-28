@@ -18,6 +18,9 @@ class AppConfig:
         self.testcase_job_workers = max(
             1, int(os.environ.get("TESTCASE_JOB_WORKERS", "4"))
         )
+        self.testcase_requirement_workers = max(
+            1, int(os.environ.get("TESTCASE_REQUIREMENT_WORKERS", "2"))
+        )
         self.testcase_job_history = max(
             1, int(os.environ.get("TESTCASE_JOB_HISTORY", "1000"))
         )

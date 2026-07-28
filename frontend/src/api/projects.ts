@@ -45,9 +45,12 @@ export type TestcaseGenerationStatus = {
   created_at: number | null
   started_at: number | null
   finished_at: number | null
-  current_requirement_id: string | null
+  processing_requirement_ids: string[]
   completed_requirement_ids: string[]
+  failed_requirement_ids: string[]
   completed_count: number
+  failed_count: number
+  processed_count: number
   total_count: number
   error: string | null
 }

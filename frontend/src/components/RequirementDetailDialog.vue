@@ -124,8 +124,17 @@
               {{ testcases.length }}
             </span>
           </button>
+          <GenerationStatusBadge
+            v-if="isGenerating"
+            active
+            label="生成中"
+          />
+          <GenerationStatusBadge
+            v-else-if="isWaiting"
+            label="等待中"
+          />
           <AppDialogButton
-            v-if="!isGenerating"
+            v-else
             class="!min-h-7 !px-3 !py-1 text-xs"
             :disabled="generationDisabled"
             @click="emitGenerate"
@@ -137,12 +146,13 @@
           <div
             v-if="testcases.length === 0"
             class="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4 text-sm"
-            :class="isGenerating ? 'text-amber-600' : 'text-slate-500'"
+            :class="isGenerating ? 'text-amber-600' : isWaiting ? 'text-slate-600' : 'text-slate-500'"
           >
             <div v-if="isGenerating" class="flex items-center gap-2">
               <span class="h-3 w-3 animate-spin rounded-full border-2 border-amber-200 border-t-amber-600"></span>
               正在生成测试用例
             </div>
+            <span v-else-if="isWaiting">等待生成测试用例</span>
             <span v-else>暂无测试项</span>
           </div>
           <div v-else class="space-y-2">
@@ -176,6 +186,7 @@ import MarkdownIt from 'markdown-it'
 import 'katex/dist/katex.min.css'
 import { computed, ref, watch } from 'vue'
 import type { RequirementTestCaseItem } from '../data/testcase'
+import GenerationStatusBadge from './generation/GenerationStatusBadge.vue'
 import TestCaseCard from './testcases/TestCaseCard.vue'
 import AppDialog from './ui/AppDialog.vue'
 import AppDialogButton from './ui/AppDialogButton.vue'
@@ -193,6 +204,7 @@ const props = defineProps<{
   requirement: RequirementDetailItem | null
   testcases: RequirementTestCaseItem[]
   isGenerating?: boolean
+  isWaiting?: boolean
   generationDisabled?: boolean
   readOnly?: boolean
 }>()

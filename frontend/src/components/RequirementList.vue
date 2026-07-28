@@ -13,7 +13,7 @@
         :requirement="item"
         :identifier="getItemId(item, index)"
         :testcase-count="item.testcaseCount"
-        :is-generating="item.isGenerating"
+        :generation-state="item.generationState"
         :selected="selectedIndex === index"
         @select="selectItem(index)"
       />
@@ -31,7 +31,7 @@ export interface RequirementListItem {
   ID?: string
   code?: string
   testcaseCount?: number
-  isGenerating?: boolean
+  generationState?: 'processing' | 'waiting'
 }
 
 const props = defineProps<{

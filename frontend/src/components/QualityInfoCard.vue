@@ -173,6 +173,7 @@ const props = defineProps<{
     status: 'idle' | 'pending' | 'running' | 'completed' | 'failed'
     active: boolean
     completed_count: number
+    processed_count: number
     total_count: number
   } | null
   coverageAnalysis?: CoverageAnalysisResponse | null
@@ -219,7 +220,7 @@ const statusText = computed(() => {
   if (!props.generationStatus) return ''
   if (props.generationStatus.status === 'pending') return '测试用例等待生成'
   if (props.generationStatus.status === 'running') {
-    return `测试用例生成中 ${props.generationStatus.completed_count}/${props.generationStatus.total_count}`
+    return `测试用例生成中 ${props.generationStatus.processed_count}/${props.generationStatus.total_count}`
   }
   if (props.generationStatus.status === 'completed') return '测试用例生成完成'
   if (props.generationStatus.status === 'failed') return '测试用例生成失败'

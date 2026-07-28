@@ -15,6 +15,7 @@ services:
       - UNIPORTAL_STORAGE_PATH=/data/uniportal
       - UNIPORTAL_SYNC_INTERVAL_SECONDS=10
       - DATA_DIR=/app/data
+      - TESTCASE_REQUIREMENT_WORKERS=${TESTCASE_REQUIREMENT_WORKERS:-2}
     restart: unless-stopped
 
 volumes:

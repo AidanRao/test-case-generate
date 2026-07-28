@@ -9,6 +9,11 @@
 
 常见错误码：`40001` 参数不合法，`40301` 只读资源不可修改，`40401` 资源不存在，`40901` 资源冲突，`50001` 服务端错误。
 
+测试用例生成相关环境变量：
+
+- `TESTCASE_REQUIREMENT_WORKERS`：单个项目生成任务或集成请求内同时生成的需求数，必须为正整数，默认为 `2`。
+- `TESTCASE_JOB_WORKERS`：同时运行的项目生成任务数，默认为 `4`。两个并发配置相互独立。
+
 ## 数据结构
 
 ### Project
@@ -155,13 +160,20 @@
   "active_requirement_ids": ["req-id"],
   "status": "running",
   "active": true,
-  "current_requirement_id": "req-id",
+  "processing_requirement_ids": ["req-id"],
   "completed_requirement_ids": [],
+  "failed_requirement_ids": [],
   "completed_count": 0,
+  "failed_count": 0,
+  "processed_count": 0,
   "total_count": 1,
   "error": null
 }
 ```
+
+需求级 AI 请求按 `TESTCASE_REQUIREMENT_WORKERS` 并发执行；任一需求生成完成后
+会立即映射并保存，用例编号按实际完成和落库顺序分配。单条需求失败不会中断同批次
+的其他需求；存在失败时任务最终状态为 `failed`，成功结果仍会保存。
 
 任务状态仅保存在当前后端进程内，服务重启后不会恢复历史任务。
 
