@@ -27,21 +27,15 @@ else
 fi
 cd ..
 
-echo "Checking for processes on port 5050..."
-PID_5050=$(lsof -ti:5050)
-if [ ! -z "$PID_5050" ]; then
-    echo "Killing process $PID_5050 on port 5050..."
-    kill -9 $PID_5050
-    sleep 1
-fi
-
-echo "Checking for processes on port 5173..."
-PID_5173=$(lsof -ti:5173)
-if [ ! -z "$PID_5173" ]; then
-    echo "Killing process $PID_5173 on port 5173..."
-    kill -9 $PID_5173
-    sleep 1
-fi
+for PORT in 5050 5173 5174; do
+    echo "Checking for processes on port $PORT..."
+    PORT_PID=$(lsof -ti:"$PORT")
+    if [ -n "$PORT_PID" ]; then
+        echo "Killing process $PORT_PID on port $PORT..."
+        kill -9 $PORT_PID
+        sleep 1
+    fi
+done
 
 echo "Starting backend server..."
 echo "UniPortal local data path: $UNIPORTAL_STORAGE_PATH"
