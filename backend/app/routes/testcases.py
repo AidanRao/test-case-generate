@@ -20,60 +20,12 @@ testcases_bp = Blueprint("testcases", __name__)
 @testcases_bp.post("/projects/<project_id>/testcase-generation-jobs")
 def create_testcase_generation_job(project_id):
     payload = request.get_json(silent=True) or {}
-    storage = current_app.config["STORAGE"]
-    project = storage.get_project(project_id)
-    if not project:
-        return error(40401, "资源不存在", 404)
-
-    requirements = storage.list_requirements(project_id) or []
-    requirements_by_id = {
-        str(item["id"]): item for item in requirements if item.get("id")
-    }
-    all_requirement_ids = [
-        str(item["id"]) for item in requirements if item.get("id")
-    ]
-    available_requirement_ids = set(all_requirement_ids)
-    requested_requirement_ids = payload.get("requirement_ids")
-    if requested_requirement_ids is None:
-        requirement_ids = all_requirement_ids
-    elif isinstance(requested_requirement_ids, list):
-        if not all(
-            isinstance(item, str) and item.strip()
-            for item in requested_requirement_ids
-        ):
-            return error(40001, "requirement_ids 只能包含非空字符串", 400)
-        requirement_ids = list(
-            dict.fromkeys(
-                item.strip() for item in requested_requirement_ids
-            )
-        )
-    else:
-        return error(40001, "requirement_ids 必须是数组", 400)
-
-    if not requirement_ids:
-        return error(40001, "没有可生成测试用例的需求", 400)
-    if any(
-        requirement_id not in available_requirement_ids
-        for requirement_id in requirement_ids
-    ):
-        return error(40401, "需求不存在", 404)
-
-    replace = bool(payload.get("replace"))
-    ai_config = payload.get("ai_config")
-    manager = current_app.extensions["testcase_job_manager"]
-    job, active_job = manager.submit(
+    job = current_app.extensions["testcase_job_manager"].submit(
         project_id,
-        [requirements_by_id[requirement_id] for requirement_id in requirement_ids],
-        replace=replace,
-        ai_config=ai_config,
+        requirement_ids=payload.get("requirement_ids"),
+        replace=bool(payload.get("replace")),
+        ai_config=payload.get("ai_config"),
     )
-    if active_job:
-        return error(
-            40901,
-            "该项目已有测试用例生成任务正在进行",
-            409,
-            active_job,
-        )
     response = ok(job)
     response.status_code = 202
     return response
@@ -82,17 +34,11 @@ def create_testcase_generation_job(project_id):
 @testcases_bp.get("/projects/<project_id>/testcase-generation-jobs/<job_id>")
 def get_testcase_generation_job(project_id, job_id):
     manager = current_app.extensions["testcase_job_manager"]
-    job = manager.get_job(job_id)
-    if not job or str(job["project_id"]) != str(project_id):
-        return error(40401, "资源不存在", 404)
-    return ok(job)
+    return ok(manager.get_project_job(project_id, job_id))
 
 
 @testcases_bp.get("/projects/<project_id>/testcase-generation-jobs")
 def get_project_testcase_generation_status(project_id):
-    storage = current_app.config["STORAGE"]
-    if not storage.get_project(project_id):
-        return error(40401, "资源不存在", 404)
     manager = current_app.extensions["testcase_job_manager"]
     return ok(manager.get_project_status(project_id))
 

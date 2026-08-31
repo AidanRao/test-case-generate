@@ -11,11 +11,13 @@ echo "Checking conda environment..."
 if ! conda env list | grep -E "^$CONDA_ENV_NAME\s"; then
     echo "Conda environment '$CONDA_ENV_NAME' not found. Creating..."
     conda create -n $CONDA_ENV_NAME python=$PYTHON_VERSION -y
-    echo "Installing backend dependencies..."
-    conda run -n $CONDA_ENV_NAME pip install -r backend/requirements.txt
 else
     echo "Conda environment '$CONDA_ENV_NAME' already exists."
 fi
+
+# Also update existing environments when backend dependencies change.
+echo "Installing backend dependencies..."
+/opt/miniconda3/condabin/conda run -n "$CONDA_ENV_NAME" python -m pip install -r backend/requirements.txt || exit 1
 
 echo "Checking frontend dependencies..."
 cd frontend

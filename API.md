@@ -14,6 +14,74 @@
 - `TESTCASE_REQUIREMENT_WORKERS`：单个项目生成任务或集成请求内同时生成的需求数，必须为正整数，默认为 `2`。
 - `TESTCASE_JOB_WORKERS`：同时运行的项目生成任务数，默认为 `4`。两个并发配置相互独立。
 
+## MCP 工具
+
+MCP 使用 Streamable HTTP，连接地址为 `https://<现有域名>/mcp`，例如
+`https://test.example.com/mcp`。不加 `/api/v1` 前缀，也不需要尾斜杠。
+这是 MCP 协议端点，不是网页或普通 REST GET 接口；请使用支持 Streamable HTTP 的 MCP 客户端。
+
+后端直连地址为 `http://localhost:5000/mcp`；使用 `start.sh` 时后端为
+`http://localhost:5050/mcp`，也可通过 Vite 的 `http://localhost:5173/mcp` 连接。
+Docker 合并镜像通过现有 Nginx 端口提供 `/mcp`，与前端和 `/api/v1` 共用域名。
+
+客户端配置示例（客户端须支持此配置格式）：
+
+```json
+{
+  "mcpServers": {
+    "test-case-generate": {
+      "url": "https://test.example.com/mcp"
+    }
+  }
+}
+```
+
+### 部署和访问方式
+
+本次不新增鉴权，必须沿用可信网络或已有网关保护；工具可读取需求和用例，生成与分析会调用服务器配置的 AI 服务并可能产生费用。
+默认接受所有 Host 和 Origin，CORS 允许任意来源，无需配置域名或来源环境变量。
+MCP 的 Host／Origin 校验及 DNS rebinding 防护已关闭；访问控制由现有网络或网关负责。
+
+安装依赖并启动：
+
+```bash
+/opt/miniconda3/condabin/conda run -n test-case-generate python -m pip install -r backend/requirements.txt
+cd backend
+/opt/miniconda3/condabin/conda run -n test-case-generate python app.py --port 5050
+```
+
+保持单进程运行，不开启多 worker：MCP 和 REST 共享存储、任务管理器及调度器。
+任务历史保存在内存中，重启后不可继续查询旧任务；已有生成结果和覆盖率数据仍按原逻辑保存。
+MCP 使用无状态 HTTP 传输，无需保存会话 ID；不提供旧式独立 `/sse` 端点。
+
+### 工具列表
+
+| 工具 | 参数 | 返回内容 |
+| --- | --- | --- |
+| `list_projects` | `keyword?`、`portal_project_id?` | 项目列表及数量统计 |
+| `get_project` | `project_id` | 项目详情、需求及用例 |
+| `list_requirements` | `project_id`、`module?`、`type?`、`keyword?` | 需求列表 |
+| `get_requirement` | `project_id`、`requirement_id` | 需求详情 |
+| `list_testcases` | `project_id`、`requirement_id` | 用例列表 |
+| `create_testcase_generation_job` | `project_id`、`requirement_ids?`、`replace?` | 生成任务及 `job_id` |
+| `get_testcase_generation_job` | `project_id`、`job_id` | 指定生成任务状态 |
+| `get_project_testcase_generation_status` | `project_id` | 当前或最近生成任务，无任务时为 idle |
+| `get_quality` | `project_id` | 质量统计 |
+| `get_coverage` | `project_id` | 已保存的覆盖率结果，没有结果时为 null |
+| `calculate_coverage` | `project_id` | 覆盖率计算任务及 `job_id` |
+| `get_coverage_calculation_job` | `project_id`、`job_id` | 指定计算任务状态 |
+| `get_project_coverage_calculation_status` | `project_id` | 当前或最近计算任务，无任务时为 idle |
+
+`?` 表示可选参数。省略 `requirement_ids` 时生成项目全部需求；空数组报错。
+`replace` 默认 false，追加用例；显式 true 时仅在对应需求生成成功后替换已有用例。
+任务提交立即返回，用状态工具轮询，完成后通过用例或覆盖率工具读取结果。
+两种入口可以互查任务，并共享重复提交和生成期间禁止修改数据、计算覆盖率的限制。
+MCP 不接受 AI 密钥或模型覆盖参数，不开放增删改、导出、系统任务管理、AI 配置和集成生成接口。
+
+成功工具结果的 `structuredContent` 为对应 REST 成功响应的 `data`，同时提供 JSON 文本内容；null 结果在文本中表示为 `null`。
+业务失败返回 `isError: true`，内容为 `{"code":...,"message":...,"data":...}`；冲突时 data 保留当前任务信息。
+协议或参数校验错误由 SDK 返回，内部异常只返回通用服务端错误，不暴露密钥和堆栈。
+
 ## 数据结构
 
 ### Project

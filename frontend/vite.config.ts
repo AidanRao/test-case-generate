@@ -6,6 +6,9 @@ export default defineConfig({
   plugins: [vue()],
   server: {
     proxy: {
+      '/mcp': {
+        target: 'http://localhost:5050',
+      },
       '/docs': {
         target: 'http://localhost:5174',
         ws: true,

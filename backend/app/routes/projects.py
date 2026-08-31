@@ -9,30 +9,12 @@ projects_bp = Blueprint("projects", __name__)
 
 @projects_bp.get("/projects")
 def list_projects():
-    storage = current_app.config["STORAGE"]
-    service = ProjectService(storage)
-    projects = service.list_projects(
+    service = ProjectService(current_app.config["STORAGE"])
+    items = service.list_project_summaries(
         keyword=request.args.get("keyword"),
         portal_project_id=request.args.get("portal_project_id"),
     )
-    project_ids = [project.get("id") for project in projects]
-    counts = service.get_project_counts(project_ids)
-    data = {
-        "list": [
-            {
-                "id": p.get("id"),
-                "code": p.get("code"),
-                "title": p.get("title"),
-                "source": p.get("source", "local"),
-                "module_count": counts.get(str(p.get("id")), {}).get("module_count", 0),
-                "requirement_count": counts.get(str(p.get("id")), {}).get(
-                    "requirement_count", 0
-                ),
-            }
-            for p in projects
-        ]
-    }
-    return ok(data)
+    return ok({"list": items})
 
 
 @projects_bp.post("/projects")
@@ -48,21 +30,10 @@ def create_project():
 
 @projects_bp.get("/projects/<project_id>")
 def get_project(project_id):
-    storage = current_app.config["STORAGE"]
-    service = ProjectService(storage)
-    project = service.get_project(project_id)
-    if not project:
+    service = ProjectService(current_app.config["STORAGE"])
+    project = service.get_project_detail(project_id)
+    if project is None:
         return error(40401, "资源不存在", 404)
-    requirements = storage.list_requirements(project_id) or []
-    testcases = storage.list_project_testcases(project_id) or []
-    testcase_map = {}
-    for testcase in testcases:
-        requirement_id = str(testcase.get("requirement_id", ""))
-        testcase_map.setdefault(requirement_id, []).append(testcase)
-    for requirement in requirements:
-        requirement_id = str(requirement.get("id", ""))
-        requirement["testcases"] = testcase_map.get(requirement_id, [])
-    project["requirements"] = requirements
     return ok(project)
 
 

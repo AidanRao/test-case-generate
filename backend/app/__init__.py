@@ -15,6 +15,8 @@ from app.storage.json_storage import JsonStorage
 from app.scheduler import SystemTaskManager
 from app.services.coverage_job_manager import CoverageJobManager
 from app.services.testcase_job_manager import TestCaseJobManager
+from app.services.errors import BusinessError
+from app.utils.responses import error
 
 
 def create_app():
@@ -41,15 +43,21 @@ def create_app():
     coverage_job_manager = CoverageJobManager(
         storage,
         app_config,
+        testcase_job_manager,
         max_workers=app_config.coverage_job_workers,
         max_history=app_config.coverage_job_history,
     )
     app.extensions["coverage_job_manager"] = coverage_job_manager
     atexit.register(coverage_job_manager.shutdown)
 
+    @app.errorhandler(BusinessError)
+    def handle_business_error(exc):
+        return error(exc.code, exc.message, exc.http_status, exc.data)
+
     system_task_manager = SystemTaskManager(storage.system_task_store, storage)
     system_task_manager.start()
     app.extensions["system_task_manager"] = system_task_manager
+    atexit.register(system_task_manager.shutdown)
 
     app.register_blueprint(projects_bp, url_prefix="/v1")
     app.register_blueprint(requirements_bp, url_prefix="/v1")

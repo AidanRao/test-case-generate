@@ -33,6 +33,7 @@ export default defineConfig({
         text: '功能指南',
         items: [
           { text: '需求与测试用例', link: '/guide/requirements-and-testcases' },
+          { text: 'MCP 使用', link: '/guide/mcp' },
           { text: '系统设置', link: '/guide/settings' },
         ],
       },

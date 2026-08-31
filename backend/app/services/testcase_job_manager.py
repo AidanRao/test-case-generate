@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from threading import RLock
 
+from app.services.errors import BusinessError
 from app.services.testcase_service import TestCaseGenerationError, TestCaseService
 from app.utils.ids import new_uuid
 
@@ -83,25 +84,36 @@ class TestCaseJobManager:
             thread_name_prefix="testcase-generation",
         )
 
-    def submit(self, project_id, requirements, replace=False, ai_config=None):
+    def submit(self, project_id, requirement_ids=None, replace=False, ai_config=None):
         project_id = str(project_id)
-        snapshots_by_id = {}
-        for requirement in requirements:
-            requirement_id = str(requirement.get("id") or "").strip()
-            if not requirement_id:
-                raise ValueError("requirement id is required")
-            snapshots_by_id.setdefault(
-                requirement_id,
-                {**requirement, "id": requirement_id},
-            )
-        if not snapshots_by_id:
-            raise ValueError("at least one requirement is required")
-        requirement_snapshots = tuple(snapshots_by_id.values())
-        normalized_ids = tuple(snapshots_by_id)
+        if not self._storage.get_project(project_id):
+            raise BusinessError(40401, "资源不存在", 404)
+        requirements = self._storage.list_requirements(project_id) or []
+        by_id = {str(item["id"]): item for item in requirements if item.get("id")}
+        if requirement_ids is None:
+            selected = list(by_id)
+        elif isinstance(requirement_ids, list):
+            if not all(isinstance(item, str) and item.strip() for item in requirement_ids):
+                raise BusinessError(40001, "requirement_ids 只能包含非空字符串")
+            selected = list(dict.fromkeys(item.strip() for item in requirement_ids))
+        else:
+            raise BusinessError(40001, "requirement_ids 必须是数组")
+        if not selected:
+            raise BusinessError(40001, "没有可生成测试用例的需求")
+        if any(requirement_id not in by_id for requirement_id in selected):
+            raise BusinessError(40401, "需求不存在", 404)
+        requirement_snapshots = tuple(
+            {**by_id[requirement_id], "id": requirement_id}
+            for requirement_id in selected
+        )
+        normalized_ids = tuple(selected)
         with self._lock:
             active_job_id = self._active_job_by_project.get(project_id)
             if active_job_id:
-                return None, self._jobs[active_job_id].to_dict()
+                raise BusinessError(
+                    40901, "该项目已有测试用例生成任务正在进行", 409,
+                    self._jobs[active_job_id].to_dict(),
+                )
 
             job = TestCaseGenerationJob(
                 id=new_uuid(),
@@ -120,15 +132,23 @@ class TestCaseJobManager:
             replace,
             ai_config,
         )
-        return job_data, None
+        return job_data
 
     def get_job(self, job_id):
         with self._lock:
             job = self._jobs.get(str(job_id))
             return job.to_dict() if job else None
 
+    def get_project_job(self, project_id, job_id):
+        job = self.get_job(job_id)
+        if not job or str(job["project_id"]) != str(project_id):
+            raise BusinessError(40401, "资源不存在", 404)
+        return job
+
     def get_project_status(self, project_id):
         project_id = str(project_id)
+        if not self._storage.get_project(project_id):
+            raise BusinessError(40401, "资源不存在", 404)
         with self._lock:
             active_job_id = self._active_job_by_project.get(project_id)
             if active_job_id:
@@ -168,6 +188,13 @@ class TestCaseJobManager:
     def has_active_project(self, project_id):
         with self._lock:
             return str(project_id) in self._active_job_by_project
+
+    def ensure_not_generating(self, project_id):
+        if self.has_active_project(project_id):
+            raise BusinessError(
+                40902, "测试用例生成期间不能修改项目数据", 409,
+                self.get_project_status(project_id),
+            )
 
     def shutdown(self, wait=False):
         self._executor.shutdown(wait=wait, cancel_futures=False)

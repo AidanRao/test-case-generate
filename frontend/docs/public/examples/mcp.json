@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "test-case-generate": {
+      "url": "https://test.example.com/mcp"
+    }
+  }
+}

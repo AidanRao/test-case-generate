@@ -37,7 +37,7 @@ RUN mkdir -p data /usr/share/nginx/html /run/nginx \
     && rm -f /etc/nginx/sites-enabled/default /etc/nginx/conf.d/default.conf
 
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
-RUN sed -i 's|http://test-case-generate-backend:5000/v1/|http://127.0.0.1:5000/v1/|' /etc/nginx/conf.d/default.conf
+RUN sed -i 's|http://test-case-generate-backend:5000|http://127.0.0.1:5000|g' /etc/nginx/conf.d/default.conf
 
 COPY --from=frontend-builder /app/frontend/dist /usr/share/nginx/html
 

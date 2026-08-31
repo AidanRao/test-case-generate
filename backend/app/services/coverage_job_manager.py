@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from threading import RLock
 
 from app.services.coverage_service import CoverageAnalysisError, CoverageService
+from app.services.errors import BusinessError
 from app.utils.ids import new_uuid
 
 
@@ -44,9 +45,10 @@ class CoverageCalculationJob:
 
 
 class CoverageJobManager:
-    def __init__(self, storage, config, max_workers=2, max_history=1000):
+    def __init__(self, storage, config, testcase_jobs, max_workers=2, max_history=1000):
         self._storage = storage
         self._config = config
+        self._testcase_jobs = testcase_jobs
         self._lock = RLock()
         self._jobs = {}
         self._active_job_by_project = {}
@@ -56,8 +58,14 @@ class CoverageJobManager:
             thread_name_prefix="coverage-calculation",
         )
 
-    def submit(self, project_id, requirements):
+    def submit(self, project_id):
         project_id = str(project_id)
+        self._testcase_jobs.ensure_not_generating(project_id)
+        if not self._storage.get_project(project_id):
+            raise BusinessError(40401, "资源不存在", 404)
+        requirements = self._storage.list_requirements(project_id) or []
+        if not requirements:
+            raise BusinessError(40001, "项目暂无需求，无法计算覆盖率")
         requirement_ids = tuple(
             dict.fromkeys(
                 str(requirement.get("id") or "").strip()
@@ -71,7 +79,10 @@ class CoverageJobManager:
         with self._lock:
             active_job_id = self._active_job_by_project.get(project_id)
             if active_job_id:
-                return None, self._jobs[active_job_id].to_dict()
+                raise BusinessError(
+                    40903, "该项目已有覆盖率计算任务正在进行", 409,
+                    self._jobs[active_job_id].to_dict(),
+                )
 
             job = CoverageCalculationJob(
                 id=new_uuid(),
@@ -84,15 +95,23 @@ class CoverageJobManager:
             job_data = job.to_dict()
 
         self._executor.submit(self._run, job.id)
-        return job_data, None
+        return job_data
 
     def get_job(self, job_id):
         with self._lock:
             job = self._jobs.get(str(job_id))
             return job.to_dict() if job else None
 
+    def get_project_job(self, project_id, job_id):
+        job = self.get_job(job_id)
+        if not job or str(job["project_id"]) != str(project_id):
+            raise BusinessError(40401, "资源不存在", 404)
+        return job
+
     def get_project_status(self, project_id):
         project_id = str(project_id)
+        if not self._storage.get_project(project_id):
+            raise BusinessError(40401, "资源不存在", 404)
         with self._lock:
             active_job_id = self._active_job_by_project.get(project_id)
             if active_job_id:
