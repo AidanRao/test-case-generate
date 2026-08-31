@@ -15,7 +15,7 @@ fi
 # 定义所有需要推送的完整标签列表
 # 我们直接在这里把本地标签和远程标签合并处理
 REPOSITORIES=(
-  "chenxuanrao/${IMAGE_NAME}:${VERSION}" # Docker Hub
+  # "chenxuanrao/${IMAGE_NAME}:${VERSION}" # Docker Hub
   "crpi-cayqrvwyllekrteg.cn-beijing.personal.cr.aliyuncs.com/personal_demos/${IMAGE_NAME}:${VERSION}" # Aliyun
 )
 
