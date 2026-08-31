@@ -46,14 +46,29 @@
               </div>
 
               <div>
-                <label class="mb-2 block text-sm font-medium text-slate-700">API Key</label>
+                <div class="mb-2 flex items-center justify-between gap-3">
+                  <label class="text-sm font-medium text-slate-700">API Key</label>
+                  <button
+                    v-if="hasApiKey"
+                    type="button"
+                    class="text-xs font-medium text-rose-600 hover:text-rose-700 disabled:opacity-50"
+                    :disabled="saving || testing"
+                    @click="toggleClearApiKey"
+                  >
+                    {{ clearApiKey ? '撤销清空' : '清空密钥' }}
+                  </button>
+                </div>
                 <input
                   v-model="form.apiKey"
                   type="password"
-                  class="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-700 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none"
-                  placeholder="可选，API 密钥"
+                  class="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-700 placeholder:text-slate-400 focus:border-indigo-400 focus:outline-none disabled:bg-slate-50"
+                  :placeholder="clearApiKey ? '保存后清空密钥' : hasApiKey ? '****************' : '可选，API 密钥'"
+                  :disabled="clearApiKey || saving"
+                  autocomplete="new-password"
                   @input="testResult = null"
                 />
+                <p v-if="clearApiKey" class="mt-2 text-xs text-rose-600">点击“保存设置”后清空密钥；当前连接测试将不使用密钥。</p>
+                <p v-else-if="hasApiKey" class="mt-2 text-xs text-slate-500">已设置 API Key，留空保留原密钥，输入新密钥可替换。</p>
               </div>
 
               <div>
@@ -80,15 +95,11 @@
                 </span>
                 <span v-else-if="testResult === 'success'" class="flex items-center gap-2">
                   <el-icon class="h-4 w-4 text-emerald-500"><CircleCheck /></el-icon>
-                  两端连接成功
-                </span>
-                <span v-else-if="testResult === 'partial'" class="flex items-center gap-2">
-                  <el-icon class="h-4 w-4 text-amber-500"><Warning /></el-icon>
-                  部分连接失败
+                  连接成功
                 </span>
                 <span v-else-if="testResult === 'error'" class="flex items-center gap-2">
                   <el-icon class="h-4 w-4 text-rose-500"><CircleClose /></el-icon>
-                  两端连接失败
+                  连接失败
                 </span>
                 <span v-else>测试连接</span>
               </button>
@@ -118,46 +129,12 @@
       <AppDialog
         :model-value="resultDialogVisible"
         title="LLM API 测试结果"
-        description="前端测试由浏览器直连 LLM，后端测试由应用服务器发起请求。"
-        size="lg"
+        description="由应用服务器连接 LLM API，浏览器仅展示测试结果。"
+        size="md"
         :close-on-click-outside="!testing"
         @update:model-value="resultDialogVisible = $event"
       >
-        <div class="grid gap-4 md:grid-cols-2">
-          <div class="rounded-2xl border border-slate-200 bg-slate-50/70 p-5">
-            <div class="mb-4 flex items-center justify-between gap-3">
-              <div class="flex items-center gap-3">
-                <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-zinc-100">
-                  <el-icon class="text-zinc-700"><Monitor /></el-icon>
-                </div>
-                <div>
-                  <h3 class="text-sm font-semibold text-slate-900">前端测试</h3>
-                  <p class="text-xs text-slate-500">浏览器 → LLM API</p>
-                </div>
-              </div>
-              <span :class="resultBadgeClass(frontendTestResult)">
-                {{ resultStatusText(frontendTestResult) }}
-              </span>
-            </div>
-            <div v-if="!frontendTestResult" class="flex items-center gap-2 py-6 text-sm text-slate-500">
-              <el-spinner class="h-4 w-4" /> 正在测试前端连接...
-            </div>
-            <div v-else class="space-y-3 text-sm">
-              <div class="grid grid-cols-2 gap-3">
-                <div class="rounded-xl bg-white p-3">
-                  <p class="text-xs text-slate-400">HTTP 状态</p>
-                  <p class="mt-1 font-semibold text-slate-700">{{ frontendTestResult.status_code ?? '—' }}</p>
-                </div>
-                <div class="rounded-xl bg-white p-3">
-                  <p class="text-xs text-slate-400">耗时</p>
-                  <p class="mt-1 font-semibold text-slate-700">{{ frontendTestResult.duration_ms }} ms</p>
-                </div>
-              </div>
-              <p class="font-medium text-slate-700">{{ frontendTestResult.message }}</p>
-              <pre v-if="frontendTestResult.detail" class="max-h-36 overflow-auto whitespace-pre-wrap break-all rounded-xl bg-slate-900 p-3 text-xs leading-relaxed text-slate-200">{{ frontendTestResult.detail }}</pre>
-            </div>
-          </div>
-
+        <div>
           <div class="rounded-2xl border border-slate-200 bg-slate-50/70 p-5">
             <div class="mb-4 flex items-center justify-between gap-3">
               <div class="flex items-center gap-3">
@@ -312,7 +289,7 @@
 <script setup lang="ts">
 import { reactive, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowLeft, Setting, CircleCheck, CircleClose, Timer, Warning, Monitor, DataLine } from '@element-plus/icons-vue'
+import { ArrowLeft, Setting, CircleCheck, CircleClose, Timer, DataLine } from '@element-plus/icons-vue'
 import AppDialog from '../components/ui/AppDialog.vue'
 import AppDialogButton from '../components/ui/AppDialogButton.vue'
 import { useAppFeedback } from '../composables/useAppFeedback'
@@ -320,6 +297,7 @@ import {
   getConfig,
   saveConfig,
   testBackendConnection,
+  type AIConfigInput,
   type ConnectionTestResult
 } from '../api/aiConfig'
 import { getSystemTasks, runSystemTask, updateSystemTask, type SystemTask } from '../api/systemTasks'
@@ -344,27 +322,43 @@ const form = reactive({
 })
 
 const testing = ref(false)
-const testResult = ref<'success' | 'partial' | 'error' | null>(null)
+const hasApiKey = ref(false)
+const clearApiKey = ref(false)
+const testResult = ref<'success' | 'error' | null>(null)
 const resultDialogVisible = ref(false)
-const frontendTestResult = ref<ConnectionTestResult | null>(null)
 const backendTestResult = ref<ConnectionTestResult | null>(null)
 
 const loadConfig = async () => {
   loading.value = true
+  clearApiKey.value = false
   try {
     const config = await getConfig()
     if (config && typeof config === 'object') {
-      form.apiKey = config.api_key || ''
+      hasApiKey.value = config.has_api_key
+      form.apiKey = ''
       form.baseUrl = config.base_url || ''
       form.model = config.model || ''
     }
   } catch {
+    hasApiKey.value = false
     form.apiKey = ''
     form.baseUrl = ''
     form.model = ''
   } finally {
     loading.value = false
   }
+}
+
+const configPayload = (): AIConfigInput => ({
+  ...(clearApiKey.value ? { api_key: '' } : form.apiKey.trim() ? { api_key: form.apiKey.trim() } : {}),
+  base_url: form.baseUrl.trim(),
+  model: form.model.trim()
+})
+
+const toggleClearApiKey = () => {
+  clearApiKey.value = !clearApiKey.value
+  form.apiKey = ''
+  testResult.value = null
 }
 
 const saveConfigHandler = async () => {
@@ -375,13 +369,8 @@ const saveConfigHandler = async () => {
 
   saving.value = true
   try {
-    const payload = {
-      api_key: form.apiKey.trim(),
-      base_url: form.baseUrl.trim(),
-      model: form.model.trim()
-    }
-
-    await saveConfig(payload)
+    await saveConfig(configPayload())
+    form.apiKey = ''
     notify({ message: '保存成功', tone: 'success' })
     await loadConfig()
   } catch {
@@ -392,6 +381,7 @@ const saveConfigHandler = async () => {
 }
 
 const resetForm = () => {
+  clearApiKey.value = false
   form.apiKey = ''
   form.baseUrl = ''
   form.model = ''
@@ -494,42 +484,7 @@ const resultBadgeClass = (result: ConnectionTestResult | null) => [
       : 'bg-rose-100 text-rose-700'
 ]
 
-const runFrontendTest = async (payload: { api_key: string; base_url: string; model: string }) => {
-  const startedAt = performance.now()
-  try {
-    const response = await fetch(`${payload.base_url.replace(/\/$/, '')}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(payload.api_key && { 'Authorization': `Bearer ${payload.api_key}` })
-      },
-      body: JSON.stringify({
-        model: payload.model,
-        messages: [{ role: 'user', content: 'ping' }],
-        max_tokens: 1
-      }),
-      signal: AbortSignal.timeout(10000)
-    })
-    const responseText = (await response.text()).slice(0, 2000)
-    return {
-      success: response.ok,
-      status_code: response.status,
-      duration_ms: Math.round(performance.now() - startedAt),
-      message: response.ok ? '前端连接成功' : `LLM API 返回 HTTP ${response.status}`,
-      detail: responseText
-    } satisfies ConnectionTestResult
-  } catch (error) {
-    return {
-      success: false,
-      status_code: null,
-      duration_ms: Math.round(performance.now() - startedAt),
-      message: '浏览器无法连接 LLM API',
-      detail: error instanceof Error ? error.message : String(error)
-    } satisfies ConnectionTestResult
-  }
-}
-
-const runBackendTest = async (payload: { api_key: string; base_url: string; model: string }) => {
+const runBackendTest = async (payload: AIConfigInput) => {
   const startedAt = performance.now()
   try {
     return await testBackendConnection(payload)
@@ -550,31 +505,18 @@ const testConnection = async () => {
     return
   }
 
-  const payload = {
-    api_key: form.apiKey.trim(),
-    base_url: form.baseUrl.trim(),
-    model: form.model.trim() || 'qwen3-max'
-  }
-
   testing.value = true
   testResult.value = null
-  frontendTestResult.value = null
   backendTestResult.value = null
   resultDialogVisible.value = true
 
-  const frontendPromise = runFrontendTest(payload).then((result) => {
-    frontendTestResult.value = result
-    return result
-  })
-  const backendPromise = runBackendTest(payload).then((result) => {
+  try {
+    const result = await runBackendTest(configPayload())
     backendTestResult.value = result
-    return result
-  })
-
-  const [frontendResult, backendResult] = await Promise.all([frontendPromise, backendPromise])
-  const successCount = [frontendResult, backendResult].filter((result) => result.success).length
-  testResult.value = successCount === 2 ? 'success' : successCount === 1 ? 'partial' : 'error'
-  testing.value = false
+    testResult.value = result.success ? 'success' : 'error'
+  } finally {
+    testing.value = false
+  }
 }
 
 onMounted(() => {

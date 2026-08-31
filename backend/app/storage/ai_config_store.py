@@ -15,7 +15,7 @@ class AIConfigStore:
 
     def get_config(self):
         data = self.io.load(self.file_path, {})
-        if not data or not data.get("api_key"):
+        if not data:
             return None
         return AIConfig.from_dict(data)
 
@@ -28,4 +28,3 @@ class AIConfigStore:
         }
         self.io.save(self.file_path, data)
         return AIConfig.from_dict(data)
-        

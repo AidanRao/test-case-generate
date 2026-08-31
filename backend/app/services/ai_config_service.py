@@ -9,20 +9,38 @@ class AIConfigService:
         self.storage = storage
 
     def get_config(self):
-        return self.storage.get_ai_config()
+        return self._public_config(self.storage.get_ai_config())
+
+    @staticmethod
+    def _public_config(config):
+        config = config or {}
+        return {
+            "has_api_key": bool(config.get("api_key")),
+            "base_url": config.get("base_url", ""),
+            "model": config.get("model", ""),
+            "updated_at": config.get("updated_at", 0.0),
+        }
+
+    def _resolve_api_key(self, payload):
+        # An omitted key preserves the stored secret; an explicit empty key clears it.
+        if "api_key" in payload:
+            return str(payload["api_key"]).strip()
+        config = self.storage.get_ai_config() or {}
+        return config.get("api_key", "")
 
     def save_config(self, payload):
         data = {
-            "api_key": payload.get("api_key", ""),
+            "api_key": self._resolve_api_key(payload),
             "base_url": payload.get("base_url", ""),
             "model": payload.get("model", ""),
             "updated_at": time.time(),
         }
-        return self.storage.save_ai_config(data)
+        config = self.storage.save_ai_config(data)
+        return self._public_config(config) if config else None
 
     def test_connection(self, payload, timeout=10):
         base_url = str(payload.get("base_url", "")).strip().rstrip("/")
-        api_key = str(payload.get("api_key", "")).strip()
+        api_key = self._resolve_api_key(payload)
         model = str(payload.get("model", "")).strip() or "qwen3-max"
         started_at = time.perf_counter()
 
@@ -56,32 +74,28 @@ class AIConfigService:
 
         try:
             with url_request.urlopen(req, timeout=timeout) as response:
-                response_body = response.read(4096).decode("utf-8", errors="replace")
+                # Do not expose upstream bodies: even errors may echo credentials.
                 status_code = response.getcode()
                 return self._test_result(
                     200 <= status_code < 300,
                     started_at,
                     status_code,
                     "后端连接成功" if 200 <= status_code < 300 else "后端连接失败",
-                    response_body,
                 )
         except url_error.HTTPError as exc:
-            response_body = exc.read(4096).decode("utf-8", errors="replace")
+            exc.close()
             return self._test_result(
                 False,
                 started_at,
                 exc.code,
                 f"LLM API 返回 HTTP {exc.code}",
-                response_body,
             )
-        except (url_error.URLError, TimeoutError, OSError) as exc:
-            reason = getattr(exc, "reason", exc)
+        except (url_error.URLError, TimeoutError, OSError):
             return self._test_result(
                 False,
                 started_at,
                 None,
                 "后端无法连接 LLM API",
-                str(reason),
             )
 
     @staticmethod

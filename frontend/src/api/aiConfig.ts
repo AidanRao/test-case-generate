@@ -1,17 +1,16 @@
 import { requestJson } from './http'
 
 export interface AIConfig {
-  api_key: string
+  has_api_key: boolean
   base_url: string
   model: string
   updated_at: number
 }
 
-interface AIConfigResponse {
-  api_key: string
+export interface AIConfigInput {
+  api_key?: string
   base_url: string
   model: string
-  updated_at: number
 }
 
 export interface ConnectionTestResult {
@@ -23,19 +22,19 @@ export interface ConnectionTestResult {
 }
 
 const getConfig = async () => {
-  const response = await requestJson<AIConfigResponse>('/ai/config')
+  const response = await requestJson<AIConfig>('/ai/config')
   return response.data
 }
 
-const saveConfig = async (payload: { api_key: string; base_url?: string; model?: string }) => {
-  const response = await requestJson<AIConfigResponse>('/ai/config', {
+const saveConfig = async (payload: AIConfigInput) => {
+  const response = await requestJson<AIConfig>('/ai/config', {
     method: 'PUT',
     body: JSON.stringify(payload)
   })
   return response.data
 }
 
-const testBackendConnection = async (payload: { api_key: string; base_url: string; model: string }) => {
+const testBackendConnection = async (payload: AIConfigInput) => {
   const response = await requestJson<ConnectionTestResult>('/ai/config/test', {
     method: 'POST',
     body: JSON.stringify(payload)
