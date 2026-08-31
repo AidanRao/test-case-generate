@@ -24,6 +24,7 @@
                 新建项目
               </button>
               <button
+                v-if="knowledgeBaseVisible"
                 class="flex w-full items-center justify-start gap-2 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-indigo-700"
                 type="button"
                 @click="openKnowledgeCreate"
@@ -51,7 +52,7 @@
               <p v-if="recentProjects.length === 0" class="text-xs text-slate-400">暂无访问记录</p>
             </div>
           </div>
-          <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div v-if="knowledgeBaseVisible" class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div class="flex items-center justify-between">
               <p class="text-xs font-semibold text-slate-500">知识库概览</p>
               <span class="text-xs text-slate-400">{{ knowledgeItems.length }}</span>
@@ -91,6 +92,7 @@
                 项目管理
               </button>
               <button
+                v-if="knowledgeBaseVisible"
                 class="rounded-full px-4 py-2 text-sm font-semibold transition"
                 :class="activeSection === 'knowledge' ? 'bg-sky-600 text-white' : 'text-slate-600 hover:bg-slate-50'"
                 type="button"
@@ -223,7 +225,7 @@
           </div>
 
           <KnowledgeBasePanel
-            v-else
+            v-else-if="knowledgeBaseVisible"
             :items="knowledgeItems"
             :projects="projects"
             :initial-project-id="knowledgeProjectId"
@@ -247,13 +249,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Collection, FolderOpened, Reading, Setting } from '@element-plus/icons-vue'
 import KnowledgeBasePanel from '../components/KnowledgeBasePanel.vue'
 import PaginationBar from '../components/PaginationBar.vue'
 import ProjectDialog from '../components/ProjectDialog.vue'
 import { useAppFeedback } from '../composables/useAppFeedback'
+import { useKnowledgeBaseVisibility } from '../composables/useKnowledgeBaseVisibility'
 import { createProject, createTestcaseGenerationJob, deleteProject, fetchProjectList, updateProject } from '../api/projects'
 import { loadKnowledgeBase, saveKnowledgeBase, type KnowledgeBaseItem } from '../data/knowledgeBaseStore'
 import { getOccupiedProjectCodes } from '../data/projectCodeValidation'
@@ -263,31 +266,27 @@ import { loadRecentProjects, recordProjectVisit } from '../data/recentProjectSto
 const router = useRouter()
 const route = useRoute()
 const { notify, confirm } = useAppFeedback()
+const { knowledgeBaseVisible } = useKnowledgeBaseVisibility()
 const portalProjectId = computed(() => typeof route.query.portal_project_id === 'string'
   ? route.query.portal_project_id
   : null)
 
-const activeSection = ref<'projects' | 'knowledge'>(route.query.tab === 'knowledge' ? 'knowledge' : 'projects')
+const activeSection = computed<'projects' | 'knowledge'>({
+  get: () => knowledgeBaseVisible.value && route.query.tab === 'knowledge' ? 'knowledge' : 'projects',
+  set: (tab) => {
+    router.replace({ query: { ...route.query, tab } })
+  }
+})
 
 watch(
-  () => route.query.tab,
-  (tab) => {
-    if (tab === 'knowledge') {
-      activeSection.value = 'knowledge'
-      return
-    }
-    if (tab === 'projects') {
+  [() => route.query.tab, knowledgeBaseVisible],
+  ([tab, visible]) => {
+    if (!visible && tab === 'knowledge') {
       activeSection.value = 'projects'
     }
-  }
+  },
+  { immediate: true }
 )
-
-watch(activeSection, (value) => {
-  if (route.query.tab === value) {
-    return
-  }
-  router.replace({ query: { ...route.query, tab: value } })
-})
 
 const projects = ref<ProjectRecord[]>(portalProjectId.value ? [] : loadProjects())
 const knowledgeItems = ref<KnowledgeBaseItem[]>(loadKnowledgeBase())
@@ -414,9 +413,11 @@ const openCreateDialog = () => {
   dialogVisible.value = true
 }
 
-const openKnowledgeCreate = () => {
+const openKnowledgeCreate = async () => {
+  if (!knowledgeBaseVisible.value) return
+  await router.replace({ query: { ...route.query, tab: 'knowledge' } })
+  await nextTick()
   knowledgeCreateSignal.value = Date.now()
-  activeSection.value = 'knowledge'
 }
 
 const openEditDialog = (project: ProjectRecord) => {

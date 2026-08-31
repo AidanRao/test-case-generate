@@ -282,6 +282,28 @@
           </template>
         </div>
       </div>
+
+      <div class="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div class="border-b border-slate-100 px-6 py-4">
+          <h2 class="text-base font-semibold text-slate-900">界面显示</h2>
+        </div>
+        <div class="p-6">
+          <label class="flex cursor-pointer items-start justify-between gap-4">
+            <span>
+              <span class="block text-sm font-medium text-slate-700">显示知识库</span>
+              <span class="mt-1 block text-xs leading-relaxed text-slate-500">控制首页的知识库入口、概览和管理面板。知识库仍为前端本地功能，隐藏不会删除已有数据。</span>
+            </span>
+            <input
+              :checked="knowledgeBaseVisible"
+              type="checkbox"
+              role="switch"
+              aria-label="显示知识库"
+              class="mt-1 h-4 w-4 shrink-0 rounded border-slate-300 text-sky-600"
+              @change="changeKnowledgeBaseVisibility"
+            />
+          </label>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -293,6 +315,7 @@ import { ArrowLeft, Setting, CircleCheck, CircleClose, Timer, DataLine } from '@
 import AppDialog from '../components/ui/AppDialog.vue'
 import AppDialogButton from '../components/ui/AppDialogButton.vue'
 import { useAppFeedback } from '../composables/useAppFeedback'
+import { useKnowledgeBaseVisibility } from '../composables/useKnowledgeBaseVisibility'
 import {
   getConfig,
   saveConfig,
@@ -305,6 +328,14 @@ import { getSystemTasks, runSystemTask, updateSystemTask, type SystemTask } from
 const router = useRouter()
 const route = useRoute()
 const { notify } = useAppFeedback()
+const { knowledgeBaseVisible, setKnowledgeBaseVisible } = useKnowledgeBaseVisibility()
+
+const changeKnowledgeBaseVisibility = (event: Event) => {
+  const saved = setKnowledgeBaseVisible((event.target as HTMLInputElement).checked)
+  if (!saved) {
+    notify({ message: '显示设置已生效，但浏览器无法保存，刷新后可能恢复默认值。', tone: 'error' })
+  }
+}
 
 const loading = ref(true)
 const saving = ref(false)
