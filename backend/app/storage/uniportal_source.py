@@ -4,14 +4,7 @@ import os
 from app.models.requirement import Requirement
 
 
-PROJECT_NAME_EXCLUDED_DIRECTORIES = {
-    "configuration-test-case-generate",
-    "document-validator",
-    "programme-automatic-repair",
-    "unit-test-generate",
-    "traceability-link-recovery",
-    "ct8114",
-}
+PROJECT_MANIFEST_PATH = os.path.join("uniportal", "project_manifest.json")
 
 
 class DocumentValidatorRequirementAdapter:
@@ -114,23 +107,22 @@ class UniPortalRequirementSource:
                     continue
                 yield current_project_id, item_id, item_path
 
-    def _visible_directories(self, item_path):
+    def _project_name(self, item_path):
+        manifest_path = os.path.join(item_path, PROJECT_MANIFEST_PATH)
         try:
-            return sorted(
-                name
-                for name in os.listdir(item_path)
-                if not name.startswith((".", "_"))
-                and os.path.isdir(os.path.join(item_path, name))
-            )
-        except OSError:
-            return []
-
-    def _project_name(self, item_id, item_path):
-        source_roots = self._visible_directories(item_path)
-        source_roots = [
-            name for name in source_roots if name not in PROJECT_NAME_EXCLUDED_DIRECTORIES
-        ]
-        return source_roots[0] if source_roots else None
+            with open(manifest_path, "r", encoding="utf-8") as source:
+                manifest = json.load(source)
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            return None
+        if not isinstance(manifest, dict):
+            return None
+        current_item = manifest.get("current_item")
+        if not isinstance(current_item, dict):
+            return None
+        name = current_item.get("name")
+        if not isinstance(name, str) or not name.strip():
+            return None
+        return name.strip()
 
     def _find_requirement_file(self, item_path, requirement_path):
         path = os.path.join(item_path, requirement_path)
@@ -147,7 +139,7 @@ class UniPortalRequirementSource:
 
     def _build_project(self, portal_project_id, item_id, item_path):
         project_code = item_id
-        project_name = self._project_name(item_id, item_path)
+        project_name = self._project_name(item_path)
         if not project_name:
             return None
         return {
@@ -158,13 +150,18 @@ class UniPortalRequirementSource:
 
     def discover_projects(self, requirement_path):
         projects = []
+        invalid_manifest_items = set()
         for current_project_id, item_id, item_path in self._iter_items() or []:
+            project = self._build_project(current_project_id, item_id, item_path)
+            if not project:
+                invalid_manifest_items.add(
+                    (str(current_project_id), str(item_id))
+                )
+                continue
             if not self._find_requirement_file(item_path, requirement_path):
                 continue
-            project = self._build_project(current_project_id, item_id, item_path)
-            if project:
-                projects.append(project)
-        return projects
+            projects.append(project)
+        return projects, invalid_manifest_items
 
     def list_requirements(
         self, project_code, requirement_path, module=None, req_type=None, keyword=None

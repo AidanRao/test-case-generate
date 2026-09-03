@@ -6,7 +6,7 @@ services:
     ports:
       - "8005:80"
     volumes:
-      # UniPortal uploads are read only; requirements.json is read from this volume.
+      # UniPortal uploads are read only; manifests and requirements are read here.
       - uniportal_storage:/data/uniportal
       # Keep using the existing local store for projects and generated test cases.
       - ./backend/data:/app/data

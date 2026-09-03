@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -37,8 +38,8 @@ class UniPortalStorageTest(unittest.TestCase):
         content="Show valid wind values.",
     ):
         item_dir = os.path.join(self.shared.name, portal_project_id, item_id)
-        source_dir = os.path.join(item_dir, project_name or "source", "src")
-        os.makedirs(source_dir, exist_ok=True)
+        os.makedirs(item_dir, exist_ok=True)
+        self._write_project_manifest(item_dir, project_name or "source")
         validator_dir = os.path.join(item_dir, "document-validator")
         os.makedirs(validator_dir, exist_ok=True)
         self._write_document_validator_file(
@@ -55,6 +56,25 @@ class UniPortalStorageTest(unittest.TestCase):
                     "tables": [],
                 }
             ],
+        )
+
+    def _write_project_manifest(self, item_dir, project_name):
+        manifest_dir = os.path.join(item_dir, "uniportal")
+        os.makedirs(manifest_dir, exist_ok=True)
+        with open(
+            os.path.join(manifest_dir, "project_manifest.json"),
+            "w",
+            encoding="utf-8",
+        ) as output:
+            json.dump({"current_item": {"name": project_name}}, output)
+
+    def _project_manifest_path(self, portal_project_id, item_id):
+        return os.path.join(
+            self.shared.name,
+            portal_project_id,
+            item_id,
+            "uniportal",
+            "project_manifest.json",
         )
 
     def _write_document_validator_file(self, validator_dir, requirements):
@@ -150,6 +170,158 @@ class UniPortalStorageTest(unittest.TestCase):
             },
             mapping,
         )
+
+    def test_reads_project_name_from_manifest_instead_of_sibling_directories(self):
+        item_dir = os.path.join(
+            self.shared.name,
+            "portal-001",
+            self.item_id,
+        )
+        os.makedirs(os.path.join(item_dir, "aaa-wrong-project", "src"))
+        storage = JsonStorage(self.local.name, self.shared.name)
+
+        storage.synchronize_uniportal(REQUIREMENT_PATH)
+
+        project = storage.list_projects(portal_project_id="portal-001")[0]
+        self.assertEqual(project["title"], self.project_name)
+
+    def test_sync_updates_project_title_when_manifest_name_changes(self):
+        storage = JsonStorage(self.local.name, self.shared.name)
+        storage.synchronize_uniportal(REQUIREMENT_PATH)
+        project = storage.list_projects(portal_project_id="portal-001")[0]
+        item_dir = os.path.join(
+            self.shared.name,
+            "portal-001",
+            self.item_id,
+        )
+        self._write_project_manifest(item_dir, "  Updated project name  ")
+
+        storage.synchronize_uniportal(REQUIREMENT_PATH)
+
+        updated = storage.list_projects(portal_project_id="portal-001")[0]
+        self.assertEqual(updated["id"], project["id"])
+        self.assertEqual(updated["title"], "Updated project name")
+
+    def test_invalid_manifests_do_not_import_new_projects(self):
+        invalid_manifests = {
+            "missing": None,
+            "invalid-json": "{",
+            "missing-current-item": {},
+            "invalid-current-item": {"current_item": "invalid"},
+            "missing-name": {"current_item": {}},
+            "non-string-name": {"current_item": {"name": 123}},
+            "empty-name": {"current_item": {"name": "   "}},
+        }
+        for suffix, manifest in invalid_manifests.items():
+            item_id = f"item-{suffix}"
+            self._write_requirements(
+                "portal-invalid",
+                item_id,
+                f"REQ-{suffix}",
+                f"project-{suffix}",
+            )
+            manifest_path = self._project_manifest_path("portal-invalid", item_id)
+            if manifest is None:
+                os.remove(manifest_path)
+            elif isinstance(manifest, str):
+                with open(manifest_path, "w", encoding="utf-8") as output:
+                    output.write(manifest)
+            else:
+                with open(manifest_path, "w", encoding="utf-8") as output:
+                    json.dump(manifest, output)
+        storage = JsonStorage(self.local.name, self.shared.name)
+
+        storage.synchronize_uniportal(REQUIREMENT_PATH)
+
+        self.assertEqual(
+            storage.list_projects(portal_project_id="portal-invalid"),
+            [],
+        )
+
+    def test_manifest_error_preserves_existing_synced_data_and_mapping(self):
+        storage = JsonStorage(self.local.name, self.shared.name)
+        storage.synchronize_uniportal(REQUIREMENT_PATH)
+        project = storage.list_projects(portal_project_id="portal-001")[0]
+        requirement = storage.list_requirements(project["id"])[0]
+        storage.add_testcases(
+            project["id"],
+            requirement["id"],
+            [
+                {
+                    "id": "TC-PRESERVED",
+                    "requirement_code": requirement["code"],
+                    "title": "Preserved testcase",
+                    "code": "TC-PRESERVED",
+                    "type": "Functional",
+                    "scenario_type": "正常流程用例",
+                    "test_steps": [],
+                }
+            ],
+        )
+        mapping = storage._load_sync_entries()
+        manifest_path = self._project_manifest_path("portal-001", self.item_id)
+        with open(manifest_path, "w", encoding="utf-8") as output:
+            output.write("{")
+
+        with (
+            patch.object(storage.io, "save", wraps=storage.io.save) as save,
+            patch("builtins.print") as output,
+        ):
+            storage.synchronize_uniportal(REQUIREMENT_PATH)
+
+        save.assert_not_called()
+        output.assert_not_called()
+        preserved = storage.get_project(project["id"])
+        self.assertIsNotNone(preserved)
+        self.assertIn(
+            project["id"],
+            {
+                item["id"]
+                for item in storage.list_projects(portal_project_id="portal-001")
+            },
+        )
+        self.assertEqual(storage.list_requirements(project["id"]), [requirement])
+        self.assertEqual(
+            [
+                item["id"]
+                for item in storage.list_testcases(
+                    project["id"],
+                    requirement["id"],
+                )
+            ],
+            ["TC-PRESERVED"],
+        )
+        self.assertEqual(storage._load_sync_entries(), mapping)
+
+    def test_missing_manifest_preserves_existing_item_when_requirements_are_missing(self):
+        storage = JsonStorage(self.local.name, self.shared.name)
+        storage.synchronize_uniportal(REQUIREMENT_PATH)
+        project = storage.list_projects(portal_project_id="portal-001")[0]
+        requirements = storage.list_requirements(project["id"])
+        mapping = storage._load_sync_entries()
+        os.remove(self._project_manifest_path("portal-001", self.item_id))
+        os.remove(
+            os.path.join(
+                self.shared.name,
+                "portal-001",
+                self.item_id,
+                REQUIREMENT_PATH,
+            )
+        )
+
+        storage.synchronize_uniportal(REQUIREMENT_PATH)
+
+        preserved = storage.get_project(project["id"])
+        self.assertIsNotNone(preserved)
+        self.assertIn(
+            project["id"],
+            {
+                item["id"]
+                for item in storage.list_projects(portal_project_id="portal-001")
+            },
+        )
+        self.assertEqual(storage.list_requirements(project["id"]), requirements)
+        self.assertEqual(storage._load_sync_entries(), mapping)
 
     def test_repeated_sync_reuses_generated_project_id(self):
         storage = JsonStorage(self.local.name, self.shared.name)
@@ -269,18 +441,38 @@ class UniPortalStorageTest(unittest.TestCase):
         self.assertTrue(any("wrote testcases.json: deleted" in item for item in messages))
         self.assertTrue(any("wrote uniportal_sync.json: updated" in item for item in messages))
 
+    def test_sync_removes_project_when_item_directory_is_deleted(self):
+        storage = JsonStorage(self.local.name, self.shared.name)
+        storage.synchronize_uniportal(REQUIREMENT_PATH)
+        project = storage.list_projects(portal_project_id="portal-001")[0]
+        shutil.rmtree(
+            os.path.join(
+                self.shared.name,
+                "portal-001",
+                self.item_id,
+            )
+        )
+
+        storage.synchronize_uniportal(REQUIREMENT_PATH)
+
+        self.assertIsNone(storage.get_project(project["id"]))
+        self.assertEqual(
+            storage.list_projects(portal_project_id="portal-001"),
+            [],
+        )
+
     def test_distinct_uniportal_sources_do_not_delete_each_others_projects(self):
         other_source = tempfile.TemporaryDirectory()
         self.addCleanup(other_source.cleanup)
         other_item_id = "item-other-source"
-        os.makedirs(
-            os.path.join(other_source.name, "portal-other", other_item_id, "other", "src"),
-            exist_ok=True,
-        )
-        validator_dir = os.path.join(
+        other_item_dir = os.path.join(
             other_source.name,
             "portal-other",
             other_item_id,
+        )
+        self._write_project_manifest(other_item_dir, "other")
+        validator_dir = os.path.join(
+            other_item_dir,
             "document-validator",
         )
         self._write_document_validator_file(
@@ -338,12 +530,16 @@ class UniPortalStorageTest(unittest.TestCase):
         self.assertTrue(storage.is_read_only_project(local_id))
         self.assertEqual(storage.list_requirements(local_id)[0]["code"], "REQ-001")
 
-    def test_ignores_requirement_without_project_name_directory(self):
-        item_id = "item-without-project-dir"
-        validator_dir = os.path.join(
+    def test_ignores_requirement_without_project_manifest(self):
+        item_id = "item-without-manifest"
+        item_dir = os.path.join(
             self.shared.name,
             "portal-flat",
             item_id,
+        )
+        os.makedirs(os.path.join(item_dir, "legacy-project-name", "src"))
+        validator_dir = os.path.join(
+            item_dir,
             "document-validator",
         )
         self._write_document_validator_file(
@@ -370,7 +566,7 @@ class UniPortalStorageTest(unittest.TestCase):
     def test_syncs_document_validator_requirement_with_json_type_and_parent_module(self):
         item_id = "item-document-validator"
         item_dir = os.path.join(self.shared.name, "portal-doc", item_id)
-        os.makedirs(os.path.join(item_dir, "source", "src"), exist_ok=True)
+        self._write_project_manifest(item_dir, "source")
         validator_dir = os.path.join(item_dir, "document-validator")
         os.makedirs(validator_dir, exist_ok=True)
         requirement_path = os.path.join(validator_dir, "requirement.json")

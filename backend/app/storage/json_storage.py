@@ -110,7 +110,9 @@ class JsonStorage(StorageBackend):
     def synchronize_uniportal(self, requirement_path):
         if not self.uniportal_source.enabled:
             return
-        remote_projects = self.uniportal_source.discover_projects(requirement_path)
+        remote_projects, invalid_manifest_items = (
+            self.uniportal_source.discover_projects(requirement_path)
+        )
         entries = self._load_sync_entries()
         source_path = self.uniportal_source.storage_path
         entries_by_code = {
@@ -180,6 +182,16 @@ class JsonStorage(StorageBackend):
             project_code = str(entry.get("project_code", ""))
             entry_source_path = entry.get("source_path")
             is_current_source = entry_source_path == source_path
+            portal_item_key = (
+                str(entry.get("portal_project_id", "")),
+                project_code,
+            )
+            if (
+                (is_current_source or not entry_source_path)
+                and portal_item_key in invalid_manifest_items
+            ):
+                updated_entries.append(entry)
+                continue
             if (
                 (is_current_source or not entry_source_path)
                 and project_code in seen_codes
